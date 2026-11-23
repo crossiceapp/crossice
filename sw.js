@@ -1,7 +1,10 @@
 /* CrossIce service worker.
-   WHEN YOU UPLOAD A NEW index.html, CHANGE THE LINE BELOW (v1 -> v2 -> v3 ...).
+   WHEN YOU UPLOAD A NEW index.html, SET THE LINE BELOW TO THE NEW VERSION.
+   It must match APPVER near the top of index.html. Patch for fixes (0.9.1),
+   minor for new features (0.10.0), major for anything that changes saved
+   drills in a way an older build cannot read (1.0.0).
    That is what tells every coach's phone to pick up the new version. */
-const CACHE = 'crossice-v2';
+const CACHE = 'crossice-0.9.1';
 
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
