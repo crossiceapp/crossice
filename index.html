@@ -1171,7 +1171,7 @@ libIn.addEventListener('input',function(e){
 });
 
 /* ---------- export / import ---------- */
-function exportText(){return JSON.stringify({app:'hockey-whiteboard',v:1,drills:DB.drills.map(function(d){return {name:d.name,saved:d.saved,core:!!d.core,tags:d.tags||[],fav:!!d.fav,snap:d.snap};}),plans:DB.plans.map(function(p){return {name:p.name,slots:p.slots.map(function(c){return c?{name:c.name,mod:!!c.mod,snap:c.snap}:null;})};})});}
+function exportText(){return JSON.stringify({app:'hockey-whiteboard',v:1,seed:Date.now(),drills:DB.drills.map(function(d){return {name:d.name,saved:d.saved,core:!!d.core,tags:d.tags||[],fav:!!d.fav,snap:d.snap};}),plans:DB.plans.map(function(p){return {name:p.name,slots:p.slots.map(function(c){return c?{name:c.name,mod:!!c.mod,snap:c.snap}:null;})};})});}
 function saveFile(name,data,ok,fail){
   var get=(window.claude&&window.claude.use)?window.claude.use('downloads'):Promise.resolve(null);
   get.then(function(d){
@@ -1648,8 +1648,43 @@ document.getElementById('mvgo').onclick=function(){
 /* ---------- full screen ---------- */
 function fsNote(){document.getElementById('status').textContent='Full screen isn\u2019t available in this view. The installed app will be full screen.';}
 document.getElementById('fs').onclick=function(){closeAll();var d=document;try{if(d.fullscreenElement){d.exitFullscreen();}else if(d.documentElement.requestFullscreen){d.documentElement.requestFullscreen({navigationUI:'hide'}).catch(fsNote);}else fsNote();}catch(e){fsNote();}};
+/* ---------- club drills ----------
+   A drills.json uploaded next to the app becomes the starter library: a coach
+   who installs gets the club's drills without importing anything, and they
+   arrive locked so nobody edits the shared copies by accident.
+   Running again only ADDS. A drill whose name is already in the library is
+   left alone, so a coach never loses their own work when the club file
+   is updated. Every export stamps itself, so a newer file is picked up and
+   an older one is ignored — there is no version number to remember. */
+function seedDrills(){
+  if(location.protocol.indexOf('http')!==0)return;
+  fetch('./drills.json',{cache:'no-store'})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(o){
+      if(!o||!Array.isArray(o.drills))return;
+      var ver=+o.seed||1;
+      if((+DB.seed||0)>=ver)return;
+      var added=0;
+      o.drills.forEach(function(d){
+        if(!d||!d.snap||!Array.isArray(d.snap.lines)||!Array.isArray(d.snap.items))return;
+        var name=String(d.name||'').trim().slice(0,60);
+        if(!name||nameTaken(name))return;
+        DB.drills.push({id:uid(),name:name,saved:d.saved||stamp(),core:true,
+                        tags:okTags(d.tags),fav:false,snap:cleanSnap(d.snap)});
+        added++;
+      });
+      DB.seed=ver;
+      DB.drills.forEach(function(d){brightenSnap(d.snap);});
+      autoTagAll();persist();
+      if(added){statusMsg(added+' club drill'+(added===1?'':'s')+' added');
+        if(lib.style.display==='block')renderLib();}
+    })
+    .catch(function(){});
+}
+
 /* ---------- start ---------- */
 loadDB();
+seedDrills();
 if(DB.draft)loadSnap(DB.draft);else paint();
 ui();setStatus();drawPins();
 </script>

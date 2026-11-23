@@ -1,7 +1,7 @@
 /* CrossIce service worker.
    WHEN YOU UPLOAD A NEW index.html, CHANGE THE LINE BELOW (v1 -> v2 -> v3 ...).
    That is what tells every coach's phone to pick up the new version. */
-const CACHE = 'crossice-v1';
+const CACHE = 'crossice-v2';
 
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
@@ -32,6 +32,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
   if (new URL(e.request.url).origin !== location.origin) return;
+  if (new URL(e.request.url).pathname.indexOf('/drills.json') >= 0) return;
   e.respondWith(
     caches.match(e.request).then(function (hit) {
       var net = fetch(e.request).then(function (res) {
