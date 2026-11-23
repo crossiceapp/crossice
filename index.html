@@ -18,8 +18,8 @@
 :root[data-theme="dark"]{--bg:#1c1c1a;--surface:#2a2a27;--border:rgba(255,255,255,.2);--text:#f1efe8;--text2:#b4b2a9;--accent-bg:#0C447C;--accent-text:#B5D4F4;--danger:#F09595;}
 html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 input{-webkit-user-select:text;user-select:text;font:inherit;color:var(--text);background:var(--surface);border:.5px solid var(--border);border-radius:3px;height:32px;padding:0 8px;box-sizing:border-box;width:100%}
-#box{position:absolute;inset:0;background:var(--bg);--barT:46px;--barB:46px}
-body.bars-off #box{--barT:0px;--barB:0px}
+#box{position:absolute;inset:0;background:var(--bg);--barT:calc(46px + env(safe-area-inset-top,0px));--barB:calc(46px + env(safe-area-inset-bottom,0px))}
+body.bars-off #box{--barT:env(safe-area-inset-top,0px);--barB:0px}
 #rink{position:absolute;left:0;top:var(--barT);width:100%;height:calc(100% - var(--barT) - var(--barB));display:block;touch-action:none;transition:top .15s,height .15s}
 #ink{pointer-events:none}
 button{font:inherit;color:var(--text);background:var(--surface);border:.5px solid var(--border);border-radius:3px;height:32px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;min-width:0}
@@ -36,7 +36,7 @@ body.bars-off #topbar{transform:translateY(-110%);pointer-events:none}
   display:flex;justify-content:center;align-items:center;
   background:var(--bg);border-top:.5px solid var(--border);pointer-events:auto;transition:transform .15s}
 body.bars-off #botbar{transform:translateY(110%);pointer-events:none}
-#barTab{position:absolute;z-index:5;right:calc(10px + env(safe-area-inset-right,0px));top:var(--barT);
+#barTab{position:absolute;z-index:5;left:50%;margin-left:-22px;top:var(--barT);
   width:44px;height:19px;padding:0;border-radius:0 0 9px 9px;border-top:none;
   background:var(--bg);color:var(--text2);display:flex;align-items:center;justify-content:center;
   pointer-events:auto;transition:top .15s}
@@ -496,6 +496,57 @@ function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 var SUBMAP={'Left end':'Bottom','Right end':'Top'};
 var QMAP={'Top left':'Bottom left','Bottom left':'Bottom right','Top right':'Top left','Bottom right':'Top right'};
 var SUBV=2;
+function fixIncoming(sn,fv){
+  if(!sn)return sn;
+  if(sn.mode==='lane')sn.mode='half';
+  if(sn.mode==='half'&&SUBMAP[sn.sub])sn.sub=SUBMAP[sn.sub];
+  if(sn.home){
+    if(sn.home.m==='lane')sn.home.m='half';
+    if(sn.home.m==='half'&&SUBMAP[sn.home.s])sn.home.s=SUBMAP[sn.home.s];
+  }
+  if((+fv||0)<2){
+    if(sn.mode==='quarter'&&QMAP[sn.sub])sn.sub=QMAP[sn.sub];
+    if(sn.home&&sn.home.m==='quarter'&&QMAP[sn.home.s])sn.home.s=QMAP[sn.home.s];
+  }
+  return sn;
+}
+
+/* A drill whose drawing does not sit in the section it claims came from a file
+   written by an older build. The drawing is right and the label is wrong, so
+   find the section of the same kind that actually contains it and relabel.
+   Only acts when exactly one section fits, and never moves anything. */
+function repairSections(){
+  if(DB.secfix)return false;
+  var ch=false;
+  function box(sn){
+    var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,n=0;
+    (sn.items||[]).forEach(function(i){n++;if(i.x<x0)x0=i.x;if(i.x>x1)x1=i.x;if(i.y<y0)y0=i.y;if(i.y>y1)y1=i.y;});
+    (sn.lines||[]).forEach(function(l){(l.arr||[]).forEach(function(q){n++;if(q[0]<x0)x0=q[0];if(q[0]>x1)x1=q[0];if(q[1]<y0)y0=q[1];if(q[1]>y1)y1=q[1];});});
+    return n?[x0,y0,x1,y1]:null;
+  }
+  function fits(r,b){var e=1.5;return b[0]>=r[0]-e&&b[2]<=r[0]+r[2]+e&&b[1]>=r[1]-e&&b[3]<=r[1]+r[3]+e;}
+  function fix(sn){
+    if(!sn||!views[sn.mode])return;
+    var b=box(sn); if(!b)return;
+    var here=views[sn.mode][sn.sub];
+    if(here&&fits(here,b))return;
+    var hit=null,n=0;
+    Object.keys(views[sn.mode]).forEach(function(k){
+      if(sn.mode==='merged')return;
+      if(fits(views[sn.mode][k],b)){n++;hit=k;}
+    });
+    if(n===1&&hit!==sn.sub){
+      if(sn.home&&sn.home.m===sn.mode&&sn.home.s===sn.sub)sn.home.s=hit;
+      sn.sub=hit;ch=true;
+    }
+  }
+  (DB.drills||[]).forEach(function(d){fix(d.snap);});
+  (DB.plans||[]).forEach(function(p){(p.slots||[]).forEach(function(c){if(c)fix(c.snap);});});
+  fix(DB.draft);
+  DB.secfix=1;persist();
+  return ch;
+}
+
 function renameSubs(){
   var ch=false, q=(+DB.subv||0)<SUBV;
   function fix(sn){
@@ -529,7 +580,7 @@ var HDRLOGO='data:image/webp;base64,UklGRlA/AABXRUJQVlA4WAoAAAAQAAAAowEAXgAAQUxQ
 /* MAJOR.MINOR.PATCH. Patch for fixes, minor for new features, major for
    anything that changes saved drills in a way an older build cannot read.
    The service worker's cache name in sw.js carries the same number. */
-var APPVER='0.9.1';
+var APPVER='0.9.3';
 
 /* ---------- tags ---------- */
 var TAGS=[['skate','Skating'],['puck','Puck Handling'],['pass','Passing'],['shoot','Shooting'],
@@ -688,7 +739,7 @@ function tagEdit(d){
 
 /* ---------- storage ---------- */
 var DB={drills:[],plans:[],draft:null,src:null}, ctx={k:'draft'};
-function loadDB(){try{var s=localStorage.getItem('hockeyWhiteboardV1');if(s){var o=JSON.parse(s);if(o&&o.drills){DB=o;ADMIN=DB.admin===true;cleanSamples();brighten();renameSubs();regMerges();tidyGroups();repairSlots();autoTagAll();}}}catch(e){}}
+function loadDB(){try{var s=localStorage.getItem('hockeyWhiteboardV1');if(s){var o=JSON.parse(s);if(o&&o.drills){DB=o;ADMIN=DB.admin===true;cleanSamples();brighten();renameSubs();regMerges();tidyGroups();repairSlots();repairSections();autoTagAll();}}}catch(e){}}
 var CMAP={'#185FA5':'#0066FF','#0D5BFF':'#0066FF','#B83A38':'#FF1F1F','#E24B4A':'#FF1F1F','#FF2D1F':'#FF1F1F','#7F3FBF':'#A726FF','#9B1FE8':'#A726FF','#3B8A1A':'#00C244','#06B64A':'#00C244','#5F5E5A':'#3BE819'};
 function brightenSnap(sn){
   if(!sn)return;
@@ -1376,7 +1427,7 @@ function planFld(k,label,v,type,wide){
   return '<label style="display:block;font-size:10px;color:var(--text2)'+(wide?';grid-column:1/-1':'')+'">'+label
     +'<input data-f="'+k+'" type="'+type+'" value="'+esc(v||'')+'" maxlength="120" style="width:100%;margin-top:1px;height:26px;font-size:12px;padding:0 5px"></label>';
 }
-function planSvg(pl,w){
+function planSvg(pl,w,noSel){
   var cells=cellsOf(pl), R=cells.map(function(i){return mapRect(cellRect(pl,i));});
   var s='<svg viewBox="-1 -1 87 202" width="'+(w||150)+'" style="flex:none;display:block"><rect x="0" y="0" width="85" height="200" rx="20" fill="#F4F9FD" stroke="#888780" stroke-width="1.2"/><line x1="0" y1="75" x2="85" y2="75" stroke="#378ADD" stroke-width="1.4"/><line x1="0" y1="125" x2="85" y2="125" stroke="#378ADD" stroke-width="1.4"/><line x1="0" y1="100" x2="85" y2="100" stroke="#E24B4A" stroke-width="1.2"/>';
   R.forEach(function(r,n){
@@ -1385,7 +1436,7 @@ function planSvg(pl,w){
   });
   R.forEach(function(r){s+='<rect x="'+r[0]+'" y="'+r[1]+'" width="'+r[2]+'" height="'+r[3]+'" fill="none" stroke="#EF9F27" stroke-width="1" stroke-dasharray="4 3"/>';});
   R.forEach(function(r,n){
-    var i=cells[n], on=(ownerOf(pl,LB.slot===null?-1:LB.slot)===i), tag=cellNums(pl,i).join('+');
+    var i=cells[n], on=!noSel&&(ownerOf(pl,LB.slot===null?-1:LB.slot)===i), tag=cellNums(pl,i).join('+');
     s+='<g data-act="slot" data-i="'+i+'" style="cursor:pointer"><rect x="'+r[0]+'" y="'+r[1]+'" width="'+r[2]+'" height="'+r[3]+'" fill="'+(on?'#378ADD':'transparent')+'" fill-opacity="0.18" stroke="'+(on?'#378ADD':'none')+'" stroke-width="1.2"/><rect x="'+(r[0]+2)+'" y="'+(r[1]+2)+'" width="'+(tag.length>1?14:12)+'" height="12" rx="6" fill="#0D5BFF"/><text x="'+(r[0]+2+(tag.length>1?7:6))+'" y="'+(r[1]+11)+'" text-anchor="middle" font-size="'+(tag.length>1?6.5:8)+'" font-weight="500" fill="#fff" font-family="sans-serif">'+tag+'</text></g>';
   });
   return s+'</svg>';
@@ -1415,7 +1466,7 @@ function renderLib(){
     h+='<div class="row" style="margin:0 0 8px">'+['half','quarter','sixth'].map(function(k){
       var on=(L===PLANL[k]);
       return '<button data-act="setl" data-v="'+k+'"'+(on?' style="background:var(--accent-bg);color:var(--accent-text)"':'')+'>'+PLANL[k].label+(LB.setl===k?' ✓?':'')+'</button>';}).join('')+'</div>';
-    h+='<div class="btns" style="margin:0 0 8px"><button data-act="sheet">View full sheet</button><button data-act="pplan">Print / PDF this plan</button></div>';
+    h+='<div class="btns" style="margin:0 0 8px"><button data-act="sheet">View full sheet</button><button data-act="pplan">Print / PDF</button><button data-act="pngplan">Save image</button></div>';
     h+='<div class="lrow" style="align-items:flex-start">'+planSvg(pl)+'<div style="flex:1;min-width:0">';
     CL.forEach(function(i,n){
       var c=pl.slots[i];
@@ -1576,6 +1627,7 @@ libIn.addEventListener('click',function(e){
     else{DB.drills.unshift({id:uid(),name:n,saved:stamp(),snap:clone(pl.slots[LB.slot].snap)});LB.saveAs=false;persist();LB.msg='Saved as a new drill, “'+esc(n)+'”. The original is unchanged.';}
   }
   else if(a==='hdr'){LB.hdr=!LB.hdr;}
+  else if(a==='pngplan'){planPng(pl);return;}
   else if(a==='mrgno'){LB.mrg=null;}
   else if(a==='mergeslot'){
     var MJ=+t.dataset.v, ML=layoutOf(pl);
@@ -1679,7 +1731,7 @@ libIn.addEventListener('input',function(e){
 });
 
 /* ---------- export / import ---------- */
-function exportText(){return JSON.stringify({app:'hockey-whiteboard',v:1,seed:Date.now(),drills:DB.drills.map(function(d){return {name:d.name,saved:d.saved,core:!!d.core,tags:d.tags||[],fav:!!d.fav,snap:d.snap};}),plans:DB.plans.map(function(p){return {name:p.name,slots:p.slots.map(function(c){return c?{name:c.name,mod:!!c.mod,snap:c.snap}:null;})};})});}
+function exportText(){return JSON.stringify({app:'hockey-whiteboard',v:1,subv:SUBV,seed:Date.now(),drills:DB.drills.map(function(d){return {name:d.name,saved:d.saved,core:!!d.core,tags:d.tags||[],fav:!!d.fav,snap:d.snap};}),plans:DB.plans.map(function(p){return {name:p.name,slots:p.slots.map(function(c){return c?{name:c.name,mod:!!c.mod,snap:c.snap}:null;})};})});}
 function saveFile(name,data,ok,fail){
   var get=(window.claude&&window.claude.use)?window.claude.use('downloads'):Promise.resolve(null);
   get.then(function(d){
@@ -1856,11 +1908,11 @@ function importText(t){
     if(!d||!d.snap||!Array.isArray(d.snap.lines)||!Array.isArray(d.snap.items))return;
     var name=String(d.name||stamp()).slice(0,60),base=name,k=2;
     while(nameTaken(name)){name=base+' ('+k+')';k++;}
-    DB.drills.unshift({id:uid(),name:name,saved:d.saved||stamp(),core:!!d.core,tags:okTags(d.tags),fav:!!d.fav,snap:cleanSnap(d.snap)});n++;
+    DB.drills.unshift({id:uid(),name:name,saved:d.saved||stamp(),core:!!d.core,tags:okTags(d.tags),fav:!!d.fav,snap:fixIncoming(cleanSnap(d.snap),o&&o.subv)});n++;
   });
   pls.forEach(function(p){
     if(!p||!Array.isArray(p.slots))return;
-    var sl=[0,1,2,3,4,5].map(function(i){var c=p.slots[i];return c&&c.snap&&Array.isArray(c.snap.lines)&&Array.isArray(c.snap.items)?{src:null,name:String(c.name||'Drill'),snap:cleanSnap(c.snap),mod:!!c.mod}:null;});
+    var sl=[0,1,2,3,4,5].map(function(i){var c=p.slots[i];return c&&c.snap&&Array.isArray(c.snap.lines)&&Array.isArray(c.snap.items)?{src:null,name:String(c.name||'Drill'),snap:fixIncoming(cleanSnap(c.snap),o&&o.subv),mod:!!c.mod}:null;});
     DB.plans.unshift({id:uid(),name:String(p.name||stamp()).slice(0,60),slots:sl});pn++;
   });
   persist();
@@ -2075,11 +2127,26 @@ document.getElementById('pr').onclick=function(){
   var ph=(ctx.k==='slot'?getPlan(ctx.p):null)||{date:todayStr(),team:DB.team||'',focus:'',equip:''};
   doPrint(planHdr(ph)+planFtr(ph)+drillBlk(curName(),snap(),'',PRW),function(){statusMsg('Printing isn\u2019t available here \u00b7 try Save image (PNG)');});
 };
+/* The whole plan as one picture, for pasting into an email. */
+function planPng(pl){
+  var e0=sheetSvgEl(pl,null);
+  var c=e0.cloneNode(true);
+  c.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  var df=svg.querySelector('defs'); if(df)c.insertBefore(df.cloneNode(true),c.firstChild);
+  var vb=(e0.getAttribute('viewBox')||'0 0 87 202').split(/[\s,]+/).map(Number);
+  var ph=2400, pw=Math.round(ph*vb[2]/vb[3]);
+  if(pw>2400){pw=2400;ph=Math.round(pw*vb[3]/vb[2]);}
+  c.setAttribute('width',pw);c.setAttribute('height',ph);
+  LB.msg='Building the image\u2026';LB.err='';renderLib();
+  rasterize(new XMLSerializer().serializeToString(c),pw,ph,slug(pl.name)+'-full-sheet.png',
+    function(){LB.msg='Image saved \u00b7 '+pw+'\u00d7'+ph;renderLib();},
+    function(){LB.msg='';LB.err='Saving an image isn\u2019t available here.';renderLib();});
+}
 function printPlan(pl,onFail){
   var tot=0;pl.slots.forEach(function(c){if(c)tot+=(+c.snap.dur||8);});
   var h=planHdr(pl)+planFtr(pl);
   h+='<div class="pblk pcover"><h1>'+esc(pl.name)+'</h1><div class="ph">'+filled(pl)+' of '+cellsOf(pl).length+' sections · '+tot+' min total</div>'
-    +planSvg(pl).replace('width="150"','width="310"')+'</div>';
+    +planSvg(pl,310,true)+'</div>';
   cellsOf(pl).forEach(function(i){var c=pl.slots[i];if(c)h+=drillBlk(c.name,c.snap,cellLabel(pl,i),PRW);});
   doPrint(h,onFail);
 }
@@ -2223,7 +2290,7 @@ function seedDrills(){
         var name=String(d.name||'').trim().slice(0,60);
         if(!name||nameTaken(name))return;
         DB.drills.push({id:uid(),name:name,saved:d.saved||stamp(),core:true,
-                        tags:okTags(d.tags),fav:false,snap:cleanSnap(d.snap)});
+                        tags:okTags(d.tags),fav:false,snap:fixIncoming(cleanSnap(d.snap),o.subv)});
         added++;
       });
       DB.seed=ver;
