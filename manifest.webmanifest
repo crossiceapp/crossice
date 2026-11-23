@@ -2,7 +2,6 @@
   "name": "CrossIce — Hockey Whiteboard",
   "short_name": "CrossIce",
   "description": "Draw hockey drills and build practice plans on a full sheet, halves, quarters or sixths.",
-  "id": "/crossice/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
