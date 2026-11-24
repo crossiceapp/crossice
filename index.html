@@ -36,7 +36,7 @@ body.bars-off #topbar{transform:translateY(-110%);pointer-events:none}
   display:flex;justify-content:center;align-items:center;
   background:var(--bg);border-top:.5px solid var(--border);pointer-events:auto;transition:transform .15s}
 body.bars-off #botbar{transform:translateY(110%);pointer-events:none}
-#barTab{position:absolute;z-index:5;left:50%;margin-left:-22px;top:var(--barT);
+#barTab{position:absolute;z-index:3;left:50%;margin-left:-22px;top:var(--barT);
   width:44px;height:19px;padding:0;border-radius:0 0 9px 9px;border-top:none;
   background:var(--bg);color:var(--text2);display:flex;align-items:center;justify-content:center;
   pointer-events:auto;transition:top .15s}
@@ -54,6 +54,11 @@ body.bars-off #barTab span{transform:rotate(0)}
 #pIcons{top:auto;bottom:calc(46px + env(safe-area-inset-bottom,0px));left:calc(6px + env(safe-area-inset-left,0px));right:calc(6px + env(safe-area-inset-right,0px));max-height:55%;overflow-y:auto;touch-action:pan-y}
 .row{display:flex;gap:3px}
 .row>button{flex:1}
+.row.wr{flex-wrap:wrap;row-gap:4px}
+.chiprow{flex:1;min-width:0;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:1px}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow>button{flex:none;white-space:nowrap}
+.row.wr>button{flex:1 1 auto}
 .tb{flex:1;height:auto!important;padding:4px 2px;flex-direction:column;gap:2px;font-size:11px}
 .sw{width:28px;height:28px;padding:0;border:none}
 .pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px}
@@ -112,6 +117,11 @@ textarea{-webkit-user-select:text;user-select:text;font:inherit;color:var(--text
 .pcover{text-align:center}
 .pcover svg{margin:0 auto}
 .prow{display:flex;gap:20px;align-items:flex-start}
+.phalf{display:flex;gap:18px;align-items:flex-start;height:380px;overflow:hidden}
+.phalf+.phalf{border-top:.5px solid #ccc;margin-top:13px;padding-top:13px}
+.phalf .ptxt{flex:1;min-width:0}
+.phalf svg{flex:none}
+.ptitle{margin:0 0 10px}
 .pcol{flex:1;min-width:0}
 .prow svg{flex:none}
 .pcol p:first-of-type,.pcol ul:first-of-type{margin-top:7px}.ui,.pop,#trash,#lib,#hint,#info,#pins,#box{display:none!important}html,body{height:auto;overflow:visible;background:#fff;color:#000}#pdoc{display:block!important}
@@ -216,6 +226,7 @@ textarea{-webkit-user-select:text;user-select:text;font:inherit;color:var(--text
         <path d="M24.4 23.95Q26.92 28 24.4 32.05M31.6 23.95Q29.08 28 31.6 32.05" fill="none" stroke="#A8B524" stroke-width="0.9" stroke-linecap="round"/>
       </symbol>
       <symbol id="puck" viewBox="0 0 56 56"><circle cx="28" cy="28" r="6" fill="#2C2C2A"/><circle cx="26.3" cy="26.3" r="1.8" fill="#5F5E5A"/></symbol>
+      <symbol id="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="5.3" fill="none" stroke="#2C2C2A" stroke-width="3"/></symbol>
     </defs>
     <g id="world" clip-path="url(#view)">
       <use href="#rinkg"/>
@@ -338,7 +349,7 @@ var T={
  SK:Ty('skater','',[14,8.5,28,29.5],1,1,[28,29]),
  CO:Ty('coach','',[16,16,24,24],0,0),
  cone:Ty('cone','',[20.4,15.8,15.2,22.4],0,0), tire:Ty('tire','',[18.64,18.64,18.72,18.72],0,0), mini:Ty('mini','',[18,21.7,20,13.7],1,0), net:Ty('net','',[12,17.5,32,22],1,0),
- stick:Ty('stick','',[14.5,11,27,34],1,0), bump:Ty('bump','',[-3.68,23,63.36,10],1,0), puck:Ty('puck','',[22,22,12,12],0,0), ball:Ty('ball','',[21.7,21.7,12.6,12.6],0,0)
+ stick:Ty('stick','',[14.5,11,27,34],1,0), bump:Ty('bump','',[-3.68,23,63.36,10],1,0), puck:Ty('puck','',[22,22,12,12],0,0), ring:Ty('ring','',[21.2,21.2,13.6,13.6],0,0), ball:Ty('ball','',[21.7,21.7,12.6,12.6],0,0)
 };
 T.cone.up=1; T.CO.up=1;
 var views={
@@ -353,14 +364,16 @@ var views={
  merged:{}
 };
 /* A plan can divide the sheet into halves, quarters or sixths. The plan map is
-   drawn portrait, so a rink rect [x,y,w,h] becomes [85-(y+h), x, h, w]. */
+   drawn portrait the same way the whiteboard is, so a rink rect [x,y,w,h]
+   becomes [y, 200-(x+w), h, w]: the rink's x axis runs UP the map, which puts
+   the Bottom end at the bottom, and its y axis runs across, timekeeper right. */
 var PLANL={
   half:   {m:'half',    label:'Halves',   keys:['Bottom','Top']},
   quarter:{m:'quarter', label:'Quarters', keys:['Bottom right','Bottom left','Top left','Top right']},
   sixth:  {m:'sixth',   label:'Sixths',   keys:['1','2','3','4','5','6']}
 };
 var LGW=32, LGH=11.91;
-function mapRect(r){return [85-(r[1]+r[3]), r[0], r[3], r[2]];}
+function mapRect(r){return [r[1], 200-(r[0]+r[2]), r[3], r[2]];}
 function layoutOf(pl){return PLANL[(pl&&pl.layout)||'sixth'];}
 
 /* A plan's grid is its layout's sections, except where sections have been
@@ -437,12 +450,21 @@ function tidyGroups(){
   });
   return ch;
 }
+/* The section every drill in this plan runs in, or null for an ordinary plan
+   whose drills are spread across the sheet. */
+function oneOf(pl){
+  if(!pl||!pl.one)return null;
+  var L=layoutOf(pl);
+  return (views[L.m]&&views[L.m][pl.one])?pl.one:null;
+}
 function cellRect(pl,i){
   var g=groupOf(pl,i),L=layoutOf(pl);
   return g?unionRect(L,g):(views[L.m]&&views[L.m][L.keys[i]]);
 }
 function cellView(pl,i){
-  var g=groupOf(pl,i),L=layoutOf(pl);
+  var L=layoutOf(pl), o=oneOf(pl);
+  if(o)return [L.m,o];
+  var g=groupOf(pl,i);
   return g?['merged',mergeKey(pl,g)]:[L.m,L.keys[i]];
 }
 function cellNums(pl,i){
@@ -450,9 +472,13 @@ function cellNums(pl,i){
   return (g?g:[i]).map(function(k){return k+1;});
 }
 function cellLabel(pl,i){
+  var o=oneOf(pl);
+  if(o)return 'Drill '+(i+1)+' of '+pl.slots.length+' · '+o;
   var n=cellNums(pl,i);
   return (n.length>1?'Sections ':'Section ')+n.join(' + ');
 }
+/* A short default name for a card, which the long label is too wordy for. */
+function cellName(pl,i){return oneOf(pl)?('Drill '+(i+1)):cellLabel(pl,i);}
 /* A combined cell keeps a record of what each section brought to it, so
    splitting apart hands every section back its own name, notes and minutes
    instead of leaving them all holding the joined-up version. */
@@ -464,6 +490,7 @@ function partsOf(card,g){
 }
 function mergeParts(a,b){var o={},k;for(k in a)o[k]=a[k];for(k in b)o[k]=b[k];return o;}
 function mergeCandidates(pl,i){
+  if(oneOf(pl))return [];
   var L=layoutOf(pl), gi=groupOf(pl,i)||[i], out=[];
   cellsOf(pl).forEach(function(j){
     if(j===ownerOf(pl,i))return;
@@ -580,13 +607,18 @@ var HDRLOGO='data:image/webp;base64,UklGRlA/AABXRUJQVlA4WAoAAAAQAAAAowEAXgAAQUxQ
 /* MAJOR.MINOR.PATCH. Patch for fixes, minor for new features, major for
    anything that changes saved drills in a way an older build cannot read.
    The service worker's cache name in sw.js carries the same number. */
-var APPVER='0.9.3';
+var APPVER='0.13.0';
 
 /* ---------- tags ---------- */
 var TAGS=[['skate','Skating'],['puck','Puck Handling'],['pass','Passing'],['shoot','Shooting'],
           ['accuracy','Accuracy'],['heads','Heads Up'],
           ['battle','Battle / 1v1'],['game','Small Area Game'],['fun','Fun / Chaos'],['goalie','Goalie']];
+var LEVELS=[['u8','8U'],['u10','10U'],['u12','12U'],['u14','14U+']];
+var ALLTAGS=TAGS.concat(LEVELS);
+var LVLK=LEVELS.map(function(t){return t[0];});
 var TAGV=2;
+/* Every drill in the library up to this point came from 8U practices. */
+var LVLV=1;
 var TAGW={
  skate:['skat','stride','edge','crossover','backward','glide','forward','agility','abc','obstacle','relay','race',' lap','pivot','transition','c-cut','mohawk','tag'],
  puck:['stickhandl','puck handl','puck control','dangle','toe drag','chaos','handling','carry'],
@@ -599,7 +631,9 @@ var TAGW={
  accuracy:['accuracy','accurate','precision','precise',' aim','target','hit the','knock the','top corner','tight window','hit and move','in the net','off the post'],
  heads:['head up','heads up','head-up','their head','his head','running into','run into','bump into','avoid each other','traffic','chaos','dodge','obstacle','weave','all players are involved','without being tagged']
 };
-function tagName(k){for(var i=0;i<TAGS.length;i++)if(TAGS[i][0]===k)return TAGS[i][1];return k;}
+function tagName(k){for(var i=0;i<ALLTAGS.length;i++)if(ALLTAGS[i][0]===k)return ALLTAGS[i][1];return k;}
+function isLvl(k){return LVLK.indexOf(k)>=0;}
+function hasLvl(d){return (d.tags||[]).some(isLvl);}
 function autoTags(d){
   var txt=((d.name||'')+' '+((d.snap&&d.snap.desc)||'')).toLowerCase(), out=[];
   TAGS.forEach(function(t){
@@ -627,11 +661,20 @@ function autoTagAll(){
     if(d.fav!==true&&d.fav!==false){d.fav=false;ch=true;}
   });
   if(DB.tagv!==TAGV){if(retagNew(['accuracy','heads']))ch=true;DB.tagv=TAGV;ch=true;}
+  /* Once only. A drill added later with no level is left alone rather than
+     being quietly called 8U, so an untagged drill stays visibly untagged. */
+  if(DB.lvlv!==LVLV){
+    (DB.drills||[]).forEach(function(d){
+      if(Array.isArray(d.tags)&&!hasLvl(d)){d.tags.push('u8');ch=true;}
+    });
+    DB.lvlv=LVLV;ch=true;
+  }
   return ch;
 }
 function okTags(v){
   if(!Array.isArray(v))return null;
-  var o=[];v.forEach(function(k){k=String(k);if(TAGW[k]&&o.indexOf(k)<0)o.push(k);});
+  var o=[];v.forEach(function(k){k=String(k);
+    if((TAGW[k]||isLvl(k))&&o.indexOf(k)<0)o.push(k);});
   return o;
 }
 /* The gestures nobody would find on their own. Kept to one line each so it
@@ -644,7 +687,7 @@ var HOWTO=[
   ['Clear the board','New drill in the \u2026 menu. It asks twice before wiping anything.']
  ]],
  ['Icons',[
-  ['Place one','Tap Icons, choose it, then tap the ice.'],
+  ['Place one','Tap Icons, choose it, then tap the ice. Pucks, rings, tennis balls, cones, tires, sticks, bumper pads and nets are all in there.'],
   ['Duplicate','Double-tap an icon to drop a copy beside it.'],
   ['Delete','Drag it to the bin that appears while you drag.'],
   ['Turn it','Select a net, stick or bumper and drag one of the corner handles. It snaps every 15 degrees.']
@@ -666,13 +709,19 @@ var HOWTO=[
  ]],
  ['Finding drills',[
   ['Search','Matches names, descriptions and key points as you type.'],
-  ['Tags','Chips stack \u2014 two chips shows only drills with both. Tap a drill\u2019s Tags button to fix what it was auto-tagged as.'],
+  ['Tags','Chips stack \u2014 two chips shows only drills with both. The number on a chip is how many drills you would be left with.'],
+  ['Level first','Level sits on its own row above the skills, since most coaches pick their age group first and then choose what to work on.'],
+  ['More tags','The skill row slides sideways. \u25be All opens every skill at once; whatever you have switched on is kept at the front of the row.'],
+  ['Level','8U to 14U+ sits on its own row. Nothing in a drill\u2019s words says what age it is for, so these are never guessed \u2014 set them yourself.'],
+  ['Sort','Newest, A\u2013Z, or Recently used, which goes by the date of the last practice plan a drill appeared in.'],
+  ['Retag a lot at once','Select, tick the drills, then tap a tag to put it on all of them. Tap it again to take it off all of them.'],
   ['Favorites','The star beside a drill\u2019s name pins it to the top of the list.']
  ]],
  ['Practice plans',[
   ['Build one','New plan, pick halves, quarters or sixths, then fill each section.'],
   ['Draw straight into it','Draw it here starts a blank drill in that section without saving it to the library first.'],
   ['Move a drill between sections','Open it with Edit in this plan, switch sections, then Move it here. The plan follows it.'],
+  ['Everything in one corner','Tap One section, then pick which one. All the plan\u2019s drills run there one after another, and it prints two to a page with no cover sheet.'],
   ['Combine sections','Select a section and tap Combine with. They have to form a rectangle. Split back apart gives each one its name and notes back.'],
   ['Header and footer','Date, team, focus and equipment print on every page.']
  ]],
@@ -700,39 +749,108 @@ function howTo(){
   h+='<p class="note" style="margin-top:14px">CrossIce '+APPVER+' \u2014 quote this if you report something that looks wrong.</p>';
   return h;
 }
+/* The date of the most recent practice plan this drill appears in. Worked out
+   from the plans themselves rather than stamped on the drill, so it stays
+   right when a plan is edited or deleted and needs nothing migrated. */
+function lastUsed(id){
+  var best='';
+  (DB.plans||[]).forEach(function(p){
+    var hit=(p.slots||[]).some(function(c){return c&&c.src===id;});
+    if(hit&&(p.date||'')>best)best=p.date||'';
+  });
+  return best;
+}
+var SORTS=[['new','Newest'],['az','A\u2013Z'],['used','Recently used']];
+function sortDrills(L){
+  var k=LB.sort||'new';
+  return L.sort(function(a,b){
+    var fv=(b.fav?1:0)-(a.fav?1:0); if(fv)return fv;
+    if(k==='az')return a.name.localeCompare(b.name);
+    if(k==='used'){
+      var ua=lastUsed(a.id), ub=lastUsed(b.id);
+      if(ua!==ub)return ub<ua?-1:1;
+      var ca=usedIn(a.id), cb=usedIn(b.id);
+      if(ca!==cb)return cb-ca;
+      return a.name.localeCompare(b.name);
+    }
+    var sa=a.saved||'', sb=b.saved||'';
+    if(sa!==sb)return sb<sa?-1:1;
+    return a.name.localeCompare(b.name);
+  });
+}
+/* matchDrill is the filter on its own so the chips can count what they would
+   each give you, without the chip's own state getting in the way. */
+function matchDrill(d,q,f,fav){
+  if(fav&&!d.fav)return false;
+  for(var i=0;i<f.length;i++)if((d.tags||[]).indexOf(f[i])<0)return false;
+  if(!q)return true;
+  var hay=(d.name+' '+((d.snap&&d.snap.desc)||'')+' '+(((d.snap&&d.snap.keys)||[]).join(' '))+' '+(d.tags||[]).map(tagName).join(' ')).toLowerCase();
+  return hay.indexOf(q)>=0;
+}
 function filtDrills(){
   var q=(LB.q||'').trim().toLowerCase(), f=LB.filt||[];
-  return (DB.drills||[]).filter(function(d){
-    if(LB.favOnly&&!d.fav)return false;
-    for(var i=0;i<f.length;i++)if((d.tags||[]).indexOf(f[i])<0)return false;
-    if(!q)return true;
-    var hay=(d.name+' '+((d.snap&&d.snap.desc)||'')+' '+(((d.snap&&d.snap.keys)||[]).join(' '))+' '+(d.tags||[]).map(tagName).join(' ')).toLowerCase();
-    return hay.indexOf(q)>=0;
-  }).sort(function(a,b){return (b.fav?1:0)-(a.fav?1:0);});
+  return sortDrills((DB.drills||[]).filter(function(d){return matchDrill(d,q,f,LB.favOnly);}));
+}
+/* How many drills a chip would leave you with if you tapped it now. Counting
+   against the other filters means a chip never offers you an empty list. */
+function tagCount(k){
+  var q=(LB.q||'').trim().toLowerCase(), f=(LB.filt||[]).slice();
+  if(f.indexOf(k)<0)f.push(k);
+  var n=0;
+  (DB.drills||[]).forEach(function(d){if(matchDrill(d,q,f,LB.favOnly))n++;});
+  return n;
 }
 function chipBtn(act,v,label,on){
   return '<button data-act="'+act+'"'+(v?' data-v="'+v+'"':'')+(arguments[4]?' data-id="'+arguments[4]+'"':'')+
     ' style="font-size:12px;padding:4px 8px'+(on?';background:var(--accent-bg);color:var(--accent-text)':'')+'">'+label+'</button>';
 }
+/* One line of chips by default, however many tags there eventually are. The
+   row scrolls sideways and the arrow opens the lot. Whatever is switched on
+   is moved to the front, so a filter can always be seen and switched off
+   without hunting for it. */
 function tagBar(){
   var f=LB.filt||[], any=(LB.q||'')||f.length||LB.favOnly;
   var h='<div class="lrow" style="gap:6px;margin:8px 0 6px"><input id="qs" placeholder="Search drills" value="'+esc(LB.q||'')+'" aria-label="Search drills" style="flex:1;min-width:0">'+
         (any?'<button data-act="clrf" style="flex:none">Clear</button>':'')+'</div>';
-  h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px">';
-  h+=chipBtn('favf','','\u2605 Favorites',!!LB.favOnly);
-  TAGS.forEach(function(t){h+=chipBtn('chip',t[0],t[1],f.indexOf(t[0])>=0);});
-  h+='</div>';
+  var listOf=function(list,sorted){
+    var items=list.map(function(t){return {k:t[0],lab:t[1],n:tagCount(t[0]),on:f.indexOf(t[0])>=0};});
+    if(sorted)items.sort(function(a,b){return b.n-a.n||a.lab.localeCompare(b.lab);});
+    /* A chip that leads nowhere is hidden rather than shown greyed out. */
+    return items.filter(function(t){return t.n||t.on;});
+  };
+  var draw=function(t){return chipBtn('chip',t.k,esc(t.lab)+' <span style="opacity:.6">'+t.n+'</span>',t.on);};
+  var fav=chipBtn('favf','','\u2605 '+(DB.drills||[]).filter(function(d){return d.fav;}).length,!!LB.favOnly);
+  var skills=listOf(TAGS,true), lvls=listOf(LEVELS,false);
+  var arrow=function(lab){return '<button data-act="tagopen" style="flex:none;font-size:12px;padding:4px 8px">'+lab+'</button>';};
+
+  /* Level keeps a row of its own, above the skills. Most coaches narrow to
+     their own age group first and then pick what to work on, so it is the
+     first thing on the screen rather than something to scroll to. There are
+     only ever a handful of levels, so this row never needs to scroll. */
+  if(lvls.length)h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 0 4px"><span style="font-size:12px;align-self:center;color:var(--text2)">Level:</span>'+lvls.map(draw).join('')+'</div>';
+
+  if(LB.tagOpen){
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 0 4px">'+fav+skills.map(draw).join('')+'</div>';
+    h+='<div style="margin:0 0 8px">'+arrow('\u25b4 Fewer')+'</div>';
+    return h;
+  }
+  var on=skills.filter(function(t){return t.on;}), off=skills.filter(function(t){return !t.on;});
+  h+='<div class="lrow" style="gap:4px;margin:0 0 8px">'
+    +'<div class="chiprow">'+fav+on.concat(off).map(draw).join('')+'</div>'
+    +arrow('\u25be All')+'</div>';
   return h;
 }
 function tagTxt(d){return (d.tags&&d.tags.length)?' \u00b7 '+esc(d.tags.map(tagName).join(' \u00b7 ')):'';}
 function tagLine(d){
-  return (d.tags&&d.tags.length)
-    ?'<div class="meta" style="color:var(--accent-text)">'+esc(d.tags.map(tagName).join(' \u00b7 '))+'</div>'
-    :'<div class="meta">No tags</div>';
+  if(!d.tags||!d.tags.length)return '<div class="meta">No tags</div>';
+  return '<div class="meta" style="color:var(--accent-text)">'+esc(d.tags.map(tagName).join(' \u00b7 '))
+    +(hasLvl(d)?'':' <span style="color:#EF9F27">\u00b7 no level</span>')+'</div>';
 }
 function tagEdit(d){
-  var h='<div style="display:flex;flex-wrap:wrap;gap:4px;margin:-2px 0 10px 10px">';
+  var h='<div style="display:flex;flex-wrap:wrap;gap:4px;margin:-2px 0 2px 10px">';
   TAGS.forEach(function(t){h+=chipBtn('settag',t[0],t[1],(d.tags||[]).indexOf(t[0])>=0,d.id);});
+  h+='</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px 10px"><span style="font-size:12px;align-self:center;color:var(--text2)">Level:</span>';
+  LEVELS.forEach(function(t){h+=chipBtn('settag',t[0],t[1],(d.tags||[]).indexOf(t[0])>=0,d.id);});
   h+=chipBtn('tagd','','Done',false,d.id)+'</div>';
   return h;
 }
@@ -837,6 +955,7 @@ function saveNow(){
    moving it does. Returns -1 when the drawing spans sections or sits outside
    them all, in which case the drill stays in the slot it already had. */
 function slotHolding(pl){
+  if(oneOf(pl))return -1;
   var b=contentBox(lines,items); if(!b)return -1;
   var cs=cellsOf(pl);
   for(var k=0;k<cs.length;k++){
@@ -988,7 +1107,7 @@ document.getElementById('mNew').onclick=function(){
 /* ---------- icon drawer ---------- */
 var LIST=[['DOT',BLUE,'Blue dot'],['DOT',RED,'Red dot']];
 ['LW','C','RW','LD','RD','G'].forEach(function(k){LIST.push([k,BLUE,'Blue '+k]);LIST.push([k,RED,'Red '+k]);});
-[['CO',null,'Coach'],['cone',null,'Cone'],['tire',null,'Tire'],['mini',null,'Mini net'],['net',null,'Full net'],['stick',null,'Stick'],['bump',null,'Bumper'],['puck',null,'Puck'],['ball',null,'Tennis ball']].forEach(function(a){LIST.push(a);});
+[['CO',null,'Coach'],['cone',null,'Cone'],['tire',null,'Tire'],['mini',null,'Mini net'],['net',null,'Full net'],['stick',null,'Stick'],['bump',null,'Bumper'],['puck',null,'Puck'],['ring',null,'Ring'],['ball',null,'Tennis ball']].forEach(function(a){LIST.push(a);});
 (function(){
   var h='';
   LIST.forEach(function(a,i){
@@ -1409,16 +1528,16 @@ function snapThumb(s,x,y,w,h,portrait,pad){
   var v=views[s.mode]&&views[s.mode][s.sub]?views[s.mode][s.sub]:views.full['Whole sheet'];
   var vx=v[0],vy=v[1],vw=v[2],vh=v[3],m=(pad===undefined?1:pad);
   var rot=portrait;
-  var vb=rot?[-(vy+vh),vx,vh,vw]:[vx,vy,vw,vh];
-  var o='<svg x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" viewBox="'+(vb[0]-m)+' '+(vb[1]-m)+' '+(vb[2]+2*m)+' '+(vb[3]+2*m)+'" style="display:block;flex:none"><g'+(rot?' transform="rotate(90)"':'')+'><use href="#rinkg"/>';
-  s.items.forEach(function(i){o+='<g transform="'+itemXf(i,rot?90:0)+'"'+(i.col?' style="color:'+i.col+'"':'')+'><use href="#'+T[i.t].s+'" width="56" height="56"/></g>';});
+  var vb=rot?[vy,-(vx+vw),vh,vw]:[vx,vy,vw,vh];
+  var o='<svg x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" viewBox="'+(vb[0]-m)+' '+(vb[1]-m)+' '+(vb[2]+2*m)+' '+(vb[3]+2*m)+'" style="display:block;flex:none"><g'+(rot?' transform="rotate(-90)"':'')+'><use href="#rinkg"/>';
+  s.items.forEach(function(i){o+='<g transform="'+itemXf(i,rot?-90:0)+'"'+(i.col?' style="color:'+i.col+'"':'')+'><use href="#'+T[i.t].s+'" width="56" height="56"/></g>';});
   s.lines.forEach(function(l){o+='<polyline points="'+pstr(l.arr)+'" fill="none" stroke="'+l.color+'" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"/>';});
   return o+'</g></svg>';
 }
 function tsvg(s,w,h){return '<svg width="'+w+'" height="'+h+'" style="flex:none;display:block">'+snapThumb(s,0,0,w,h,false)+'</svg>';}
 
 /* ---------- library ---------- */
-var LB={tab:'drills',scr:'list',plan:null,slot:null,picker:false,saveAs:false,msg:'',err:'',del:null,delp:null,setl:null,mrg:null,hdr:false,q:'',filt:[],favOnly:false,tagd:null,qf:false};
+var LB={tab:'drills',scr:'list',plan:null,slot:null,picker:false,saveAs:false,msg:'',err:'',del:null,delp:null,setl:null,mrg:null,hdr:false,q:'',filt:[],favOnly:false,tagd:null,qf:false,sort:'new',pickOn:false,pick:[],tagOpen:false};
 var lib=document.getElementById('lib'), libIn=document.getElementById('libIn');
 function canEdit(d){return ADMIN||!d.core;}
 function usedIn(id){return DB.plans.filter(function(p){return p.slots.some(function(s){return s&&s.src===id;});}).length;}
@@ -1429,6 +1548,17 @@ function planFld(k,label,v,type,wide){
 }
 function planSvg(pl,w,noSel){
   var cells=cellsOf(pl), R=cells.map(function(i){return mapRect(cellRect(pl,i));});
+  var one=oneOf(pl);
+  if(one){
+    var L1=layoutOf(pl), r1=mapRect(views[L1.m][one]);
+    var pick=(!noSel&&LB.slot!==null&&pl.slots[LB.slot])?LB.slot:-1;
+    if(pick<0)for(var q=0;q<pl.slots.length;q++)if(pl.slots[q]){pick=q;break;}
+    var sh='<svg viewBox="-1 -1 87 202" width="'+(w||150)+'" style="flex:none;display:block"><rect x="0" y="0" width="85" height="200" rx="20" fill="#F4F9FD" stroke="#888780" stroke-width="1.2"/><line x1="0" y1="75" x2="85" y2="75" stroke="#378ADD" stroke-width="1.4"/><line x1="0" y1="125" x2="85" y2="125" stroke="#378ADD" stroke-width="1.4"/><line x1="0" y1="100" x2="85" y2="100" stroke="#E24B4A" stroke-width="1.2"/>';
+    if(pick>=0)sh+=snapThumb(pl.slots[pick].snap,r1[0],r1[1],r1[2],r1[3],true,0);
+    sh+='<rect x="'+r1[0]+'" y="'+r1[1]+'" width="'+r1[2]+'" height="'+r1[3]+'" fill="#378ADD" fill-opacity="0.1" stroke="#EF9F27" stroke-width="1.2" stroke-dasharray="4 3"/>';
+    if(pick>=0)sh+='<rect x="'+(r1[0]+2)+'" y="'+(r1[1]+2)+'" width="12" height="12" rx="6" fill="#0D5BFF"/><text x="'+(r1[0]+8)+'" y="'+(r1[1]+11)+'" text-anchor="middle" font-size="8" font-weight="500" fill="#fff" font-family="sans-serif">'+(pick+1)+'</text>';
+    return sh+'</svg>';
+  }
   var s='<svg viewBox="-1 -1 87 202" width="'+(w||150)+'" style="flex:none;display:block"><rect x="0" y="0" width="85" height="200" rx="20" fill="#F4F9FD" stroke="#888780" stroke-width="1.2"/><line x1="0" y1="75" x2="85" y2="75" stroke="#378ADD" stroke-width="1.4"/><line x1="0" y1="125" x2="85" y2="125" stroke="#378ADD" stroke-width="1.4"/><line x1="0" y1="100" x2="85" y2="100" stroke="#E24B4A" stroke-width="1.2"/>';
   R.forEach(function(r,n){
     var i=cells[n], c=pl.slots[i], cv=cellView(pl,i);
@@ -1462,11 +1592,18 @@ function renderLib(){
     }
     var L=layoutOf(pl), CL=cellsOf(pl), R=CL.map(function(i){return mapRect(cellRect(pl,i));});
     var ptot=0;pl.slots.forEach(function(c){if(c)ptot+=(+c.snap.dur||8);});
-    h+='<div class="meta" style="margin:2px 0 8px">'+filled(pl)+' of '+CL.length+' sections filled · '+ptot+' min total · saved automatically</div>';
-    h+='<div class="row" style="margin:0 0 8px">'+['half','quarter','sixth'].map(function(k){
+    var ONE=oneOf(pl);
+    h+='<div class="meta" style="margin:2px 0 8px">'+filled(pl)+' of '+CL.length+(ONE?' drills filled '+'·'+' all in '+esc(ONE):' sections filled')+' · '+ptot+' min total · saved automatically</div>';
+    h+='<div class="row wr" style="margin:0 0 8px">'+['half','quarter','sixth'].map(function(k){
       var on=(L===PLANL[k]);
-      return '<button data-act="setl" data-v="'+k+'"'+(on?' style="background:var(--accent-bg);color:var(--accent-text)"':'')+'>'+PLANL[k].label+(LB.setl===k?' ✓?':'')+'</button>';}).join('')+'</div>';
-    h+='<div class="btns" style="margin:0 0 8px"><button data-act="sheet">View full sheet</button><button data-act="pplan">Print / PDF</button><button data-act="pngplan">Save image</button></div>';
+      return '<button data-act="setl" data-v="'+k+'"'+(on?' style="background:var(--accent-bg);color:var(--accent-text)"':'')+'>'+(ONE?PLANL[k].keys.length+' drills':PLANL[k].label)+(LB.setl===k?' ✓?':'')+'</button>';}).join('')
+      +'<button data-act="setone" data-v="'+(ONE?'':'on')+'"'+(ONE?' style="background:var(--accent-bg);color:var(--accent-text)"':'')+'>One section</button></div>';
+    if(ONE){
+      h+='<div class="row wr" style="margin:0 0 4px"><span style="font-size:12px;align-self:center;color:var(--text2)">Which:</span>'+L.keys.map(function(k){
+        return '<button data-act="setone" data-v="'+esc(k)+'"'+(k===ONE?' style="background:var(--accent-bg);color:var(--accent-text)"':'')+'>'+esc(k)+'</button>';}).join('')+'</div>';
+      h+='<p class="note" style="margin:0 0 8px">All '+CL.length+' drills run in '+esc(ONE)+', one after another. '+PLANL[(pl.layout||'sixth')].label+' sets both how big that piece of ice is and how many drills fit.</p>';
+    }
+    h+='<div class="btns" style="margin:0 0 8px"><button data-act="sheet">'+(ONE?'View drills':'View full sheet')+'</button><button data-act="pplan">Print / PDF</button>'+(ONE?'':'<button data-act="pngplan">Save image</button>')+'</div>';
     h+='<div class="lrow" style="align-items:flex-start">'+planSvg(pl)+'<div style="flex:1;min-width:0">';
     CL.forEach(function(i,n){
       var c=pl.slots[i];
@@ -1481,7 +1618,7 @@ function renderLib(){
       if(groupOf(pl,LB.slot))h+='<button data-act="splitslot">Split back apart</button>';
       MC.forEach(function(j){h+='<button data-act="mergeslot" data-v="'+j+'">Combine with '+cellNums(pl,j).join('+')+'</button>';});
       h+='</div>';
-      if(!MC.length&&!groupOf(pl,LB.slot))h+='<p class="note">Nothing next to this one makes a rectangle, so it cannot be combined.</p>';
+      if(!MC.length&&!groupOf(pl,LB.slot)&&!ONE)h+='<p class="note">Nothing next to this one makes a rectangle, so it cannot be combined.</p>';
       if(LB.mrg!==null&&MC.indexOf(LB.mrg)>=0){
         var oa=ownerOf(pl,LB.slot), ob=ownerOf(pl,LB.mrg);
         h+='<p class="note err">Sections '+cellNums(pl,oa).join('+')+' and '+cellNums(pl,ob).join('+')+' both already have a drill \u2014 \u201c'+esc(pl.slots[oa].name)+'\u201d and \u201c'+esc(pl.slots[ob].name)+'\u201d. Combining puts both on one sheet as a single drill. Nothing is lost: splitting apart later gives each section back its own name, notes and minutes.</p>';
@@ -1510,12 +1647,32 @@ function renderLib(){
       else h+=tagBar();
       var FL=filtDrills();
       if(DB.drills.length){
-        h+='<div class="meta" style="margin:0 0 6px">Showing '+FL.length+' of '+DB.drills.length+' drills</div>';
+        h+='<div class="lrow" style="margin:0 0 6px;gap:6px"><div class="meta" style="flex:1;min-width:0">Showing '+FL.length+' of '+DB.drills.length+' drills</div>'
+          +SORTS.map(function(sv){return chipBtn('sort',sv[0],sv[1],(LB.sort||'new')===sv[0]);}).join('')
+          +chipBtn('pickon','',LB.pickOn?'Done':'Select',!!LB.pickOn)+'</div>';
+        if(LB.pickOn){
+          var np=(LB.pick||[]).length;
+          h+='<div style="border:.5px solid var(--border);border-radius:4px;padding:6px 8px;margin:0 0 8px;background:var(--surface)">';
+          h+='<div class="lrow" style="gap:6px;margin-bottom:'+(np?'6px':'0')+'"><div class="meta" style="flex:1;min-width:0">'+(np?np+' selected':'Tap the drills you want to change')+'</div>'
+            +chipBtn('pickall','','Select all '+FL.length,false)+(np?chipBtn('picknone','','None',false):'')+'</div>';
+          if(np){
+            h+='<div class="meta" style="margin:0 0 3px">Tap a tag to add it to all '+np+'. Tap again to take it off all of them.</div>';
+            h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+            ALLTAGS.forEach(function(t){
+              var all=(LB.pick||[]).every(function(pid){var dd=getDrill(pid);return dd&&(dd.tags||[]).indexOf(t[0])>=0;});
+              h+=chipBtn('btag',t[0],esc(t[1]),all);
+            });
+            h+='</div>';
+          }
+          h+='</div>';
+        }
         if(!FL.length)h+='<p class="note">Nothing matches. Tap Clear to see them all again.</p>';
       }
       FL.forEach(function(d){
         var u=usedIn(d.id);
-        h+='<div class="it" style="cursor:default">'+tsvg(d.snap,64,38)+'<div class="mid"><div style="display:flex;align-items:center;gap:6px"><button data-act="fav" data-id="'+d.id+'" aria-label="Favorite" style="flex:none;font-size:15px;line-height:1;padding:3px 7px'+(d.fav?';color:#EF9F27':'')+'">'+(d.fav?'\u2605':'\u2606')+'</button><div class="nm"'+(canEdit(d)?' data-act="rename" data-k="d" data-id="'+d.id+'"':'')+'>'+esc(d.name)+(d.core?' <span style="font-size:11px;color:var(--text2);font-weight:400">\u00b7 core</span>':'')+'</div></div><div class="meta">'+(+d.snap.dur||8)+' min'+(u?' · in '+u+' plan'+(u===1?'':'s'):'')+'</div>'+((d.snap.keys&&d.snap.keys.length)?'<div class="meta">'+esc(d.snap.keys.join(' · '))+'</div>':'<div class="meta" style="color:#EF9F27">No key points yet</div>')+tagLine(d)+(d.snap.desc?'<div class="meta" style="color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(d.snap.desc)+'</div>':'')+'</div><div style="display:flex;flex-direction:column;gap:4px;flex:none">'+'<button data-act="tagd" data-id="'+d.id+'" style="font-size:12px">Tags</button>'+(canEdit(d)?'<button data-act="editd" data-id="'+d.id+'" style="font-size:13px">Edit</button>':'')+'<button data-act="opend" data-id="'+d.id+'" style="font-size:13px">Edit as new</button>'+(canEdit(d)?'<button data-act="deld" data-id="'+d.id+'" style="font-size:13px;color:var(--danger)">'+(LB.del===d.id?'Tap to confirm':'Delete')+'</button>':'')+(ADMIN?'<button data-act="core" data-id="'+d.id+'" style="font-size:12px">'+(d.core?'Core \u2713':'Make core')+'</button>':'')+'</div></div>';
+        h+='<div class="it" style="cursor:default">'
+          +(LB.pickOn?('<button data-act="pick" data-id="'+d.id+'" aria-label="Select this drill" style="flex:none;font-size:15px;line-height:1;padding:3px 7px'+((LB.pick||[]).indexOf(d.id)>=0?';background:var(--accent-bg);color:var(--accent-text)':'')+'">'+((LB.pick||[]).indexOf(d.id)>=0?'\u2611':'\u2610')+'</button>'):'')
+          +tsvg(d.snap,64,38)+'<div class="mid"><div style="display:flex;align-items:center;gap:6px"><button data-act="fav" data-id="'+d.id+'" aria-label="Favorite" style="flex:none;font-size:15px;line-height:1;padding:3px 7px'+(d.fav?';color:#EF9F27':'')+'">'+(d.fav?'\u2605':'\u2606')+'</button><div class="nm"'+(canEdit(d)?' data-act="rename" data-k="d" data-id="'+d.id+'"':'')+'>'+esc(d.name)+(d.core?' <span style="font-size:11px;color:var(--text2);font-weight:400">\u00b7 core</span>':'')+'</div></div><div class="meta">'+(+d.snap.dur||8)+' min'+(u?' · in '+u+' plan'+(u===1?'':'s'):'')+'</div>'+((d.snap.keys&&d.snap.keys.length)?'<div class="meta">'+esc(d.snap.keys.join(' · '))+'</div>':'<div class="meta" style="color:#EF9F27">No key points yet</div>')+tagLine(d)+(d.snap.desc?'<div class="meta" style="color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(d.snap.desc)+'</div>':'')+'</div><div style="display:flex;flex-direction:column;gap:4px;flex:none">'+'<button data-act="tagd" data-id="'+d.id+'" style="font-size:12px">Tags</button>'+(canEdit(d)?'<button data-act="editd" data-id="'+d.id+'" style="font-size:13px">Edit</button>':'')+'<button data-act="opend" data-id="'+d.id+'" style="font-size:13px">Edit as new</button>'+(canEdit(d)?'<button data-act="deld" data-id="'+d.id+'" style="font-size:13px;color:var(--danger)">'+(LB.del===d.id?'Tap to confirm':'Delete')+'</button>':'')+(ADMIN?'<button data-act="core" data-id="'+d.id+'" style="font-size:12px">'+(d.core?'Core \u2713':'Make core')+'</button>':'')+'</div></div>';
         if(LB.tagd===d.id)h+=tagEdit(d);
       });
       h+='<div class="btns"><button data-act="exp">Export file</button><button data-act="cpy">Copy</button><button data-act="impf">Import file</button><button data-act="impp">Paste</button></div><input type="file" id="fi" accept=".json,application/json" style="display:none">';
@@ -1526,14 +1683,15 @@ function renderLib(){
       h+='<p class="note">Core drills are locked: Edit as new opens your own copy, and saving it needs a different name. Your own drills can be edited or deleted freely.</p>';
     } else if(LB.tab==='plans'){
       DB.plans.forEach(function(p){
-        h+='<div class="it" data-act="openplan" data-id="'+p.id+'"><span class="bd" style="background:#EF9F27">'+filled(p)+'</span><div class="mid"><div class="nm" data-act="rename" data-k="p" data-id="'+p.id+'">'+esc(p.name)+'</div><div class="meta">'+filled(p)+' of '+layoutOf(p).keys.length+' sections · '+layoutOf(p).label.toLowerCase()+'</div></div><button data-act="delp" data-id="'+p.id+'" style="flex:none;font-size:13px;color:var(--danger)">'+(LB.delp===p.id?'Tap to confirm':'Delete')+'</button></div>';
+        h+='<div class="it" data-act="openplan" data-id="'+p.id+'"><span class="bd" style="background:#EF9F27">'+filled(p)+'</span><div class="mid"><div class="nm" data-act="rename" data-k="p" data-id="'+p.id+'">'+esc(p.name)+'</div><div class="meta">'+filled(p)+' of '+layoutOf(p).keys.length+(oneOf(p)?' drills · all in '+esc(oneOf(p)):' sections · '+layoutOf(p).label.toLowerCase())+'</div></div><button data-act="delp" data-id="'+p.id+'" style="flex:none;font-size:13px;color:var(--danger)">'+(LB.delp===p.id?'Tap to confirm':'Delete')+'</button></div>';
       });
       h+='<div class="btns" style="margin-top:10px"><span style="font-size:13px;align-self:center">New plan:</span>'+['half','quarter','sixth'].map(function(k){
-        return '<button data-act="newplan" data-v="'+k+'">'+PLANL[k].label+'</button>';}).join('')+'</div>';
+        return '<button data-act="newplan" data-v="'+k+'">'+PLANL[k].label+'</button>';}).join('')
+        +'<button data-act="newplan" data-v="one:quarter">One corner</button></div>';
       if(lines.length||items.length)
         h+='<div class="btns" style="margin-top:8px"><span style="font-size:13px;align-self:center">From the board now:</span>'+['half','quarter','sixth'].map(function(k){
           return '<button data-act="boardplan" data-v="'+k+'">'+PLANL[k].label+'</button>';}).join('')+'</div>';
-      h+='<p class="note">Halves and quarters suit older levels that need more ice for a drill. You can switch a plan between them later. <b>From the board now</b> splits whatever you have drawn on the ice into a plan, one drill per section, without saving anything to the library first. Tap a name to rename it.</p>';
+      h+='<p class="note"><b>One corner</b> is for a practice where your team has the same piece of ice all session and works through its drills one after another: four drills, all in the corner you pick. Halves and quarters suit older levels that need more ice for a drill. You can switch a plan between them later. <b>From the board now</b> splits whatever you have drawn on the ice into a plan, one drill per section, without saving anything to the library first. Tap a name to rename it.</p>';
     }
   }
   libIn.innerHTML=h;
@@ -1587,11 +1745,48 @@ libIn.addEventListener('click',function(e){
   else if(a==='clrf'){LB.q='';LB.filt=[];LB.favOnly=false;}
   else if(a==='fav'){var fd=getDrill(id);if(fd){fd.fav=!fd.fav;persist();}}
   else if(a==='tagd'){LB.tagd=(LB.tagd===id?null:id);}
+  else if(a==='sort'){LB.sort=t.dataset.v;}
+  else if(a==='tagopen'){LB.tagOpen=!LB.tagOpen;}
+  else if(a==='pickon'){LB.pickOn=!LB.pickOn;LB.pick=[];LB.tagd=null;}
+  else if(a==='pick'){LB.pick=LB.pick||[];
+    var pi=LB.pick.indexOf(id); if(pi<0)LB.pick.push(id); else LB.pick.splice(pi,1);}
+  else if(a==='pickall'){LB.pick=filtDrills().map(function(d){return d.id;});}
+  else if(a==='picknone'){LB.pick=[];}
+  else if(a==='btag'){
+    var bk=t.dataset.v, ids=LB.pick||[];
+    var all=ids.every(function(pid){var dd=getDrill(pid);return dd&&(dd.tags||[]).indexOf(bk)>=0;});
+    var n=0;
+    ids.forEach(function(pid){
+      var dd=getDrill(pid); if(!dd)return;
+      dd.tags=Array.isArray(dd.tags)?dd.tags:[];
+      var at=dd.tags.indexOf(bk);
+      if(all){if(at>=0){dd.tags.splice(at,1);n++;}}
+      else if(at<0){dd.tags.push(bk);n++;}
+    });
+    persist();
+    LB.msg=(all?'Took ':'Added ')+tagName(bk)+(all?' off ':' to ')+n+' drill'+(n===1?'':'s')+'.';
+  }
   else if(a==='settag'){var td=getDrill(id);if(td){td.tags=Array.isArray(td.tags)?td.tags:[];var ti=td.tags.indexOf(t.dataset.v);if(ti<0)td.tags.push(t.dataset.v);else td.tags.splice(ti,1);persist();}}
   else if(a==='openplan'){LB.scr='plan';LB.plan=id;LB.slot=null;LB.picker=false;LB.saveAs=false;}
-  else if(a==='newplan'){var lk=t.dataset.v||'sixth';
-    var np={id:uid(),name:stamp(),layout:lk,date:todayStr(),team:DB.team||'',focus:'',equip:'',slots:emptySlots(PLANL[lk])};
+  else if(a==='newplan'){var lk=t.dataset.v||'sixth', lone=null;
+    if(lk.indexOf('one:')===0){lk=lk.slice(4);
+      lone=(PLANL[lk].keys.indexOf(DB.onesec||'')>=0)?DB.onesec:PLANL[lk].keys[0];}
+    var np={id:uid(),name:stamp(),layout:lk,one:lone,date:todayStr(),team:DB.team||'',focus:'',equip:'',slots:emptySlots(PLANL[lk])};
     DB.plans.unshift(np);persist();LB.scr='plan';LB.plan=np.id;LB.slot=null;}
+  else if(a==='setone'){
+    var ov=t.dataset.v;
+    if(!ov){pl.one=null;LB.msg='Back to one drill per section.';}
+    else{
+      var LO=layoutOf(pl);
+      pl.one=(ov==='on')?((LO.keys.indexOf(DB.onesec||'')>=0)?DB.onesec:LO.keys[0]):ov;
+      DB.onesec=pl.one;
+      pl.groups=[];regMerges();
+      /* Each drill keeps its own drawing but is moved onto the shared ice. */
+      pl.slots.forEach(function(c){if(c){fitSnap(c.snap,LO.m,pl.one);c.mod=true;}});
+      LB.msg='Every drill in this plan now runs in '+pl.one+'.';
+    }
+    LB.slot=null;LB.setl=null;persist();
+  }
   else if(a==='setl'){
     var nk=t.dataset.v, NL=PLANL[nk];
     if(NL&&(pl.layout||'sixth')!==nk){
@@ -1599,8 +1794,15 @@ libIn.addEventListener('click',function(e){
       var kept=pl.slots.filter(Boolean), drop=Math.max(0,kept.length-NL.keys.length);
       if(drop&&LB.setl!==nk){LB.setl=nk;LB.err='Switching to '+NL.label.toLowerCase()+' leaves room for '+NL.keys.length+' drills, so '+drop+' would be dropped. Tap '+NL.label+' again to confirm.';}
       else{
+        /* A one-section plan keeps the section in the same place in the new
+           layout's list, so four drills in the first quarter become six in
+           the first sixth, and every drill is moved onto that piece of ice.
+           Read before pl.layout changes, or the old key is no longer in it. */
+        var oi=pl.one?layoutOf(pl).keys.indexOf(pl.one):-1;
         pl.layout=nk;
-        pl.slots=NL.keys.map(function(k,i){var c=kept[i];return c?{src:c.src,name:c.name,mod:c.mod,snap:fitSnap(clone(c.snap),NL.m,k)}:null;});
+        if(pl.one)pl.one=NL.keys[Math.min(oi<0?0:oi,NL.keys.length-1)];
+        pl.slots=NL.keys.map(function(k,i){var c=kept[i];return c?{src:c.src,name:c.name,mod:c.mod,snap:fitSnap(clone(c.snap),NL.m,pl.one||k)}:null;});
+        if(pl.one)DB.onesec=pl.one;
         LB.slot=null;LB.setl=null;persist();
         LB.msg='Plan is now in '+NL.label.toLowerCase()+'.'+(drop?' '+drop+' drill'+(drop===1?'':'s')+' did not fit and '+(drop===1?'was':'were')+' removed.':'');
       }
@@ -1616,8 +1818,8 @@ libIn.addEventListener('click',function(e){
   else if(a==='back'){LB.scr='list';LB.tab='plans';LB.slot=null;LB.picker=false;LB.saveAs=false;}
   else if(a==='slot'){LB.slot=ownerOf(pl,+t.dataset.i);LB.picker=false;LB.saveAs=false;LB.mrg=null;}
   else if(a==='pick'){LB.picker=!LB.picker;}
-  else if(a==='addd'){var d=getDrill(id),La=layoutOf(pl);
-    pl.slots[LB.slot]={src:d.id,name:d.name,snap:fitSnap(clone(d.snap),La.m,La.keys[LB.slot]),mod:false};LB.picker=false;persist();}
+  else if(a==='addd'){var d=getDrill(id),Av=cellView(pl,LB.slot);
+    pl.slots[LB.slot]={src:d.id,name:d.name,snap:fitSnap(clone(d.snap),Av[0],Av[1]),mod:false};LB.picker=false;persist();}
   else if(a==='rmslot'){pl.slots[LB.slot]=null;LB.saveAs=false;persist();}
   else if(a==='saveas'){LB.saveAs=!LB.saveAs;}
   else if(a==='cancel'){LB.saveAs=false;}
@@ -1695,7 +1897,7 @@ libIn.addEventListener('click',function(e){
     /* Start an empty drill straight into this section of the plan, instead of
        having to draw it on the whiteboard and save it as a drill first. */
     var CV=cellView(pl,LB.slot);
-    pl.slots[LB.slot]={src:null,name:cellLabel(pl,LB.slot),mod:true,
+    pl.slots[LB.slot]={src:null,name:cellName(pl,LB.slot),mod:true,
       snap:{mode:CV[0],sub:CV[1],desc:'',keys:[],dur:8,home:{m:CV[0],s:CV[1]},xf:idXf(),lines:[],items:[]}};
     persist();
     ctx={k:'slot',p:pl.id,i:LB.slot};loadSnap(clone(pl.slots[LB.slot].snap));
@@ -1742,7 +1944,7 @@ function saveFile(name,data,ok,fail){
   }).catch(fail);
 }
 function dlFile(){
-  saveFile('hockey-drills-'+stamp().slice(0,10)+'.json',exportText(),
+  saveFile('hockey-drills-'+stamp().replace(' ','-').replace(':','')+'.json',exportText(),
     function(){LB.err='';LB.msg='Exported. Keep the file as a backup or send it to another coach.';renderLib();},
     function(){LB.err='Saving a file isn’t available here. Use Copy instead.';renderLib();});
 }
@@ -1785,14 +1987,14 @@ function staticItem(i,wr){
 }
 /* The plan drawn on the ice: the whole sheet with dividers, or one section. */
 function sheetSvgEl(pl,sec){
-  var L=layoutOf(pl), m=1.5;
-  var v=(sec==null)?[0,0,200,85]:views[L.m][L.keys[sec]];
+  var L=layoutOf(pl), m=1.5, cvs=(sec==null)?null:cellView(pl,sec);
+  var v=(sec==null)?[0,0,200,85]:(views[cvs[0]]&&views[cvs[0]][cvs[1]])||views[L.m][L.keys[sec]];
   var gm=(sec==null)?10:m;   /* gutter for the zone numbers outside the boards */
   var o=el('svg',{viewBox:(v[0]-m)+' '+(v[1]-gm)+' '+(v[2]+2*m)+' '+(v[3]+2*gm)});
   o.appendChild(el('use',{href:'#rinkg'}));
   [[65.5,90],[134.5,-90]].forEach(function(z){
-    if((z[0]-3.57)>=v[0]-0.5&&(z[0]+3.57)<=v[0]+v[2]+0.5&&26.5>=v[1]-0.5&&58.5<=v[1]+v[3]+0.5)
-      o.appendChild(el('use',{href:'#lg',transform:'translate('+z[0]+' 42.5) rotate('+z[1]+') translate(-16 -3.57)',opacity:0.5}));
+    if((z[0]-LGH/2)>=v[0]-0.5&&(z[0]+LGH/2)<=v[0]+v[2]+0.5&&(42.5-LGW/2)>=v[1]-0.5&&(42.5+LGW/2)<=v[1]+v[3]+0.5)
+      o.appendChild(el('use',{href:'#lg',transform:'translate('+z[0]+' 42.5) rotate('+z[1]+') translate(-'+(LGW/2)+' -'+(LGH/2)+')',opacity:0.5}));
   });
   var list=((sec==null)?pl.slots:[pl.slots[sec]]).filter(Boolean);
   list.forEach(function(c){c.snap.items.forEach(function(i){var n=staticItem(i,0);if(n)o.appendChild(n);});});
@@ -1832,7 +2034,7 @@ var shPl=null, shSec=null, shEl=document.getElementById('sheet');
 function shMsg(t){document.getElementById('shMsg').textContent=t||'';}
 function renderShTabs(){
   var L=layoutOf(shPl), on='background:var(--accent-bg);color:var(--accent-text)';
-  var h='<button data-s="all" style="'+(shSec==null?on:'')+'">Full sheet</button>';
+  var h=oneOf(shPl)?'':'<button data-s="all" style="'+(shSec==null?on:'')+'">Full sheet</button>';
   L.keys.forEach(function(k,i){
     var c=shPl.slots[i], st=(shSec===i?on:(c?'':'opacity:.4'));
     h+='<button data-s="'+i+'"'+(c?'':' disabled')+' style="'+st+'">'+(i+1)+'</button>';
@@ -1862,7 +2064,8 @@ document.getElementById('shTabs').addEventListener('click',function(e){
 });
 function openSheet(pl,sec){
   shPl=pl;shSec=(sec==null?null:sec);shMsg('');
-  document.getElementById('shName').textContent=pl.name+(shSec==null?' \u00b7 full sheet':' \u00b7 section '+(shSec+1));
+  if(shSec==null&&oneOf(pl))for(var z=0;z<pl.slots.length;z++)if(pl.slots[z]){shSec=z;break;}
+  document.getElementById('shName').textContent=pl.name+(shSec==null?' \u00b7 full sheet':' \u00b7 '+(oneOf(pl)?'drill ':'section ')+(shSec+1));
   var body=document.getElementById('sheetBody');body.innerHTML='';
   body.appendChild(sheetSvgEl(pl,shSec));
   renderShTabs();renderShInfo();
@@ -2142,12 +2345,33 @@ function planPng(pl){
     function(){LB.msg='Image saved \u00b7 '+pw+'\u00d7'+ph;renderLib();},
     function(){LB.msg='';LB.err='Saving an image isn\u2019t available here.';renderLib();});
 }
+/* Two drills to a page, each with its notes beside the ice. A practice with
+   more than four drills gets a full sheet up front so the station layout is
+   visible at a glance; four or fewer does not need one, since those are built
+   a corner at a time and the corner is always the same. */
 function printPlan(pl,onFail){
-  var tot=0;pl.slots.forEach(function(c){if(c)tot+=(+c.snap.dur||8);});
+  var cells=cellsOf(pl).filter(function(i){return pl.slots[i];});
+  var tot=0;cells.forEach(function(i){tot+=(+pl.slots[i].snap.dur||8);});
   var h=planHdr(pl)+planFtr(pl);
-  h+='<div class="pblk pcover"><h1>'+esc(pl.name)+'</h1><div class="ph">'+filled(pl)+' of '+cellsOf(pl).length+' sections · '+tot+' min total</div>'
-    +planSvg(pl,310,true)+'</div>';
-  cellsOf(pl).forEach(function(i){var c=pl.slots[i];if(c)h+=drillBlk(c.name,c.snap,cellLabel(pl,i),PRW);});
+  var head='<h1>'+esc(pl.name)+'</h1><div class="ph">'
+    +cells.length+' drill'+(cells.length===1?'':'s')+' · '+tot+' min total</div>';
+  if(!cells.length){doPrint(h+'<div class="pblk">'+head+'<p>Nothing in this plan yet.</p></div>',onFail);return;}
+  var cover=cells.length>4&&!oneOf(pl);
+  if(cover)h+='<div class="pblk pcover">'+head+planSvg(pl,310,true)+'</div>';
+  for(var k=0;k<cells.length;k+=2){
+    var first=(!cover&&k===0);
+    h+='<div class="pblk">'+(first?('<div class="ptitle">'+head+'</div>'):'');
+    [cells[k],cells[k+1]].forEach(function(i){
+      if(i===undefined)return;
+      var c=pl.slots[i], sn=c.snap;
+      h+='<div class="phalf"><div class="ptxt"><h2>'+esc(c.name)+'</h2>'
+        +'<div class="pm">'+esc(cellLabel(pl,i))+' · '+(+sn.dur||8)+' min</div>'
+        +(sn.desc?'<p>'+esc(sn.desc)+'</p>':'')
+        +((sn.keys&&sn.keys.length)?'<ul>'+sn.keys.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>':'')
+        +'</div>'+bigSvg(sn,300,first?330:370)+'</div>';
+    });
+    h+='</div>';
+  }
   doPrint(h,onFail);
 }
 /* ---------- fit a drill to another sixth ---------- */
