@@ -278,8 +278,8 @@ textarea{-webkit-user-select:text;user-select:text;font:inherit;color:var(--text
     <div style="display:flex;gap:10px;align-items:center" id="cols">
       <button class="sw" data-c="#A726FF" aria-label="Purple" style="background:#A726FF"></button>
       <button class="sw" data-c="#00C244" aria-label="Green" style="background:#00C244"></button>
-      <button class="sw" data-c="#FF1F1F" aria-label="Red" style="background:#FF1F1F"></button>
-      <button class="sw" data-c="#0066FF" aria-label="Blue" style="background:#0066FF"></button>
+      <button class="sw" id="swHome" data-c="#FF1F1F" aria-label="Home team color" style="background:#FF1F1F"></button>
+      <button class="sw" id="swAway" data-c="#0066FF" aria-label="Away team color" style="background:#0066FF"></button>
       <input type="color" id="cust" value="#D85A30" aria-label="Custom color" style="width:28px;height:28px;padding:0;border:none;background:none;cursor:pointer">
     </div>
   </div>
@@ -335,6 +335,16 @@ textarea{-webkit-user-select:text;user-select:text;font:inherit;color:var(--text
 
 <script>
 var NS='http://www.w3.org/2000/svg', S=0.1875, BLUE='#0066FF', RED='#FF1F1F', COACH='#3BE819';
+/* Away and Home. Stored in the database so they survive a reload. */
+var TEAMC=[BLUE,RED];
+function teamCol(i){return TEAMC[i]||(i?RED:BLUE);}
+/* White letters vanish on gold or white, so pick the ink to suit the shirt. */
+function labelInk(hex){
+  if(!hex||hex.charAt(0)!=='#'||hex.length<7)return '#fff';
+  var r=parseInt(hex.substr(1,2),16),g=parseInt(hex.substr(3,2),16),b=parseInt(hex.substr(5,2),16);
+  return (0.299*r+0.587*g+0.114*b)>140?'#15140F':'#fff';
+}
+var TEAMPAL=['#0066FF','#FF1F1F','#00C244','#A726FF','#F08C00','#15140F','#E8B800','#8B939B'];
 var P={pencil:'M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3zM13.5 6.5l3 3',pointer:'M5 3l14 7-6 2-2 6z',eraser:'M19 20H8.5l-4-4a1.4 1.4 0 0 1 0-2L14 4.5a1.4 1.4 0 0 1 2 0l4 4a1.4 1.4 0 0 1 0 2L12 19M8 12l5 5',undo:'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',dots:'M5 12h.01M12 12h.01M19 12h.01',trash:'M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3',chev:'M6 9l6 6 6-6',folder:'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',save:'M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',plus:'M12 5v14M5 12h14',full:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',image:'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15 9h.01'};
 function ico(n,s){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(n==='dots'?3:2)+'" stroke-linecap="round" stroke-linejoin="round"><path d="'+P[n]+'"/></svg>';}
 function fillIcons(root){root.querySelectorAll('[data-ico]').forEach(function(e){e.innerHTML=ico(e.dataset.ico,+e.dataset.s||18);e.style.display='inline-flex';});}
@@ -343,6 +353,9 @@ fillIcons(document);
 function Ty(s,l,bb,r,p,pv){return {s:s,l:l,bb:bb,r:r,p:p,pv:pv||null};}
 var P1=[19.2,19.2,17.6,17.6];
 var T={
+ F:Ty('fwd','F',P1,0,1), D:Ty('def','D',P1,0,1),
+ F1:Ty('fwd','F1',P1,0,1), F2:Ty('fwd','F2',P1,0,1), F3:Ty('fwd','F3',P1,0,1), F4:Ty('fwd','F4',P1,0,1),
+ D1:Ty('def','D1',P1,0,1), D2:Ty('def','D2',P1,0,1), D3:Ty('def','D3',P1,0,1), D4:Ty('def','D4',P1,0,1),
  LW:Ty('fwd','LW',P1,0,1), C:Ty('fwd','C',P1,0,1), RW:Ty('fwd','RW',P1,0,1),
  LD:Ty('def','LD',P1,0,1), RD:Ty('def','RD',P1,0,1),
  G:Ty('gk','G',[14.4,21.2,27.2,13.6],1,1), DOT:Ty('fwd','',P1,0,1),
@@ -607,7 +620,7 @@ var HDRLOGO='data:image/webp;base64,UklGRlA/AABXRUJQVlA4WAoAAAAQAAAAowEAXgAAQUxQ
 /* MAJOR.MINOR.PATCH. Patch for fixes, minor for new features, major for
    anything that changes saved drills in a way an older build cannot read.
    The service worker's cache name in sw.js carries the same number. */
-var APPVER='0.13.0';
+var APPVER='0.15.0';
 
 /* ---------- tags ---------- */
 var TAGS=[['skate','Skating'],['puck','Puck Handling'],['pass','Passing'],['shoot','Shooting'],
@@ -688,6 +701,9 @@ var HOWTO=[
  ]],
  ['Icons',[
   ['Place one','Tap Icons, choose it, then tap the ice. Pucks, rings, tennis balls, cones, tires, sticks, bumper pads and nets are all in there.'],
+  ['Forwards and defence','F and D are the plain ones. F1 to F4 and D1 to D4 tell lines or groups apart \u2014 place F1 three times for a first line, or use them one each if you number by position.'],
+  ['Positions','LW, C, RW, LD and RD are folded away behind + positions on each team, since most age groups do not use them.'],
+  ['Team colors','Tap the circle beside Away or Home to change that team\u2019s color \u2014 handy for matching the other team at a game. Players of that team already on the ice change with it, and the pen gets the new color too. Saved drills keep the colors they were saved with.'],
   ['Duplicate','Double-tap an icon to drop a copy beside it.'],
   ['Delete','Drag it to the bin that appears while you drag.'],
   ['Turn it','Select a net, stick or bumper and drag one of the corner handles. It snaps every 15 degrees.']
@@ -857,7 +873,7 @@ function tagEdit(d){
 
 /* ---------- storage ---------- */
 var DB={drills:[],plans:[],draft:null,src:null}, ctx={k:'draft'};
-function loadDB(){try{var s=localStorage.getItem('hockeyWhiteboardV1');if(s){var o=JSON.parse(s);if(o&&o.drills){DB=o;ADMIN=DB.admin===true;cleanSamples();brighten();renameSubs();regMerges();tidyGroups();repairSlots();repairSections();autoTagAll();}}}catch(e){}}
+function loadDB(){try{var s=localStorage.getItem('hockeyWhiteboardV1');if(s){var o=JSON.parse(s);if(o&&o.drills){DB=o;ADMIN=DB.admin===true;if(DB.cols&&DB.cols.length===2)TEAMC=DB.cols.slice();cleanSamples();brighten();renameSubs();regMerges();tidyGroups();repairSlots();repairSections();autoTagAll();}}}catch(e){}}
 var CMAP={'#185FA5':'#0066FF','#0D5BFF':'#0066FF','#B83A38':'#FF1F1F','#E24B4A':'#FF1F1F','#FF2D1F':'#FF1F1F','#7F3FBF':'#A726FF','#9B1FE8':'#A726FF','#3B8A1A':'#00C244','#06B64A':'#00C244','#5F5E5A':'#3BE819'};
 function brightenSnap(sn){
   if(!sn)return;
@@ -1105,23 +1121,116 @@ document.getElementById('mNew').onclick=function(){
 };
 
 /* ---------- icon drawer ---------- */
-var LIST=[['DOT',BLUE,'Blue dot'],['DOT',RED,'Red dot']];
-['LW','C','RW','LD','RD','G'].forEach(function(k){LIST.push([k,BLUE,'Blue '+k]);LIST.push([k,RED,'Red '+k]);});
-[['CO',null,'Coach'],['cone',null,'Cone'],['tire',null,'Tire'],['mini',null,'Mini net'],['net',null,'Full net'],['stick',null,'Stick'],['bump',null,'Bumper'],['puck',null,'Puck'],['ring',null,'Ring'],['ball',null,'Tennis ball']].forEach(function(a){LIST.push(a);});
-(function(){
-  var h='';
-  LIST.forEach(function(a,i){
-    var t=T[a[0]], bb=t.bb, cx=bb[0]+bb[2]/2, cy=bb[1]+bb[3]/2, size=Math.max(bb[2],bb[3])+8;
-    var col=t.p?a[1]:(a[0]==='CO'?COACH:'');
-    var cap=(t.p?'':a[2]);
-    h+='<div><button class="pt" data-i="'+i+'" aria-label="'+a[2]+'"><svg viewBox="'+(cx-size/2)+' '+(cy-size/2)+' '+size+' '+size+'"'+(col?' style="color:'+col+'"':'')+'><use href="#'+t.s+'" width="56" height="56"/>'+(t.l?'<text x="'+cx+'" y="'+(cy+4)+'" text-anchor="middle" font-size="'+(t.l.length>1||t.s==='gk'?8.8:9.6)+'" font-weight="500" fill="#fff" font-family="sans-serif">'+t.l+'</text>':'')+'</svg></button>'+(cap?'<p class="cap">'+cap+'</p>':'')+'</div>';
+var ROW1=['DOT','F','F1','F2','F3','F4'];
+var ROW2=['G','D','D1','D2','D3','D4'];
+var POSNS=['LW','C','RW','LD','RD'];
+var OBJS=[['CO',null,'Coach'],['cone',null,'Cone'],['tire',null,'Tire'],['mini',null,'Mini net'],['net',null,'Full net'],['stick',null,'Stick'],['bump',null,'Bumper'],['puck',null,'Puck'],['ring',null,'Ring'],['ball',null,'Tennis ball']];
+var TEAMS=[['Away'],['Home']];
+var LIST=[];
+TEAMS.forEach(function(t,ti){
+  ROW1.concat(ROW2,POSNS).forEach(function(k){
+    LIST.push([k,ti,t[0]+' '+(k==='DOT'?'player':k)]);
   });
+});
+OBJS.forEach(function(a){LIST.push([a[0],null,a[2]]);});
+function listIdx(k,ti){
+  for(var i=0;i<LIST.length;i++)if(LIST[i][0]===k&&LIST[i][1]===ti)return i;
+  return -1;
+}
+/* Which team's palette is open, or -1. */
+var ICCOL=-1;
+/* Which teams have their position icons showing. */
+var ICPOS=[false,false];
+
+function iconTile(i,w){
+  var a=LIST[i], t=T[a[0]], bb=t.bb;
+  var cx=bb[0]+bb[2]/2, cy=bb[1]+bb[3]/2, size=Math.max(bb[2],bb[3])+7;
+  var col=t.p?teamCol(a[1]):(a[0]==='CO'?COACH:'');
+  return '<button class="pt" data-i="'+i+'" aria-label="'+esc(a[2])+'" style="flex:none;width:'+w+'px">'
+    +'<svg viewBox="'+(cx-size/2)+' '+(cy-size/2)+' '+size+' '+size+'"'+(col?' style="color:'+col+'"':'')+'>'
+    +'<use href="#'+t.s+'" width="56" height="56"/>'
+    +(t.l?'<text x="'+cx+'" y="'+(cy+4)+'" text-anchor="middle" font-size="'+(t.l.length>1||t.s==='gk'?8.8:9.6)
+    +'" font-weight="500" fill="'+labelInk(col)+'" font-family="sans-serif">'+t.l+'</text>':'')
+    +'</svg></button>';
+}
+function iconRow(keys,ti,mb){
+  return '<div style="display:flex;gap:4px;margin:0 0 '+mb+'px">'
+    +keys.map(function(k){return iconTile(listIdx(k,ti),46);}).join('')+'</div>';
+}
+/* Changing a team's color repaints the players of that team already on the
+   ice, which is what you want when you are matching the other team's
+   jerseys mid-drill. Saved drills keep the colors they were saved with. */
+function setTeamColor(ti,hex){
+  var old=teamCol(ti);
+  if(!hex||hex===old)return;
+  var hit=items.filter(function(i){return i.col===old;});
+  var pen=(color===old);
+  TEAMC[ti]=hex; DB.cols=TEAMC.slice(); persist();
+  hit.forEach(function(i){i.col=hex;});
+  if(pen)color=hex;
+  hist.push({undo:function(){
+    TEAMC[ti]=old; DB.cols=TEAMC.slice(); persist();
+    hit.forEach(function(i){i.col=old;});
+    if(pen)color=old;
+    syncPen(); drawIcons(); ui(); render();
+  }});
+  syncPen(); drawIcons(); ui(); render(); dirty();
+}
+/* The two team swatches in the pen palette follow the team colors, so a
+   line can be drawn to match. */
+function syncPen(){
+  [['swAway',0],['swHome',1]].forEach(function(p){
+    var b=document.getElementById(p[0]); if(!b)return;
+    var c=teamCol(p[1]);
+    b.dataset.c=c; b.style.background=c;
+    b.setAttribute('aria-label',(p[1]?'Home':'Away')+' team color');
+  });
+}
+function drawIcons(){
+  var h='';
+  TEAMS.forEach(function(t,ti){
+    var open=ICPOS[ti];
+    h+='<div style="display:flex;align-items:center;gap:7px;margin:'+(ti?'4px':'0')+' 0 4px">'
+      +'<span style="font-size:13px;font-weight:500">'+t[0]+'</span>'
+      +'<button data-tc="'+ti+'" aria-label="'+t[0]+' team color" style="flex:none;width:21px;height:21px;padding:0;border-radius:50%;background:'+teamCol(ti)+'"></button>'
+      +'<span style="flex:1"></span>'
+      +'<button data-pos="'+ti+'" style="flex:none;padding:3px 9px;font-size:12px'
+      +(open?';background:var(--accent-bg);color:var(--accent-text)':'')+'">'
+      +(open?'\u2212':'+')+' positions</button></div>';
+    if(ICCOL===ti){
+      h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 7px">'
+        +TEAMPAL.map(function(c){
+          return '<button data-setc="'+ti+'" data-c="'+c+'" aria-label="'+c+'" style="flex:none;width:25px;height:25px;padding:0;border-radius:50%;background:'+c
+            +(c===teamCol(ti)?';outline:2px solid var(--text);outline-offset:2px':'')+'"></button>';
+        }).join('')
+        +'<input type="color" data-cust="'+ti+'" value="'+teamCol(ti)+'" aria-label="Custom '+t[0]+' color" style="width:28px;height:28px;padding:0;border:none;background:none;cursor:pointer">'
+        +'</div>';
+    }
+    h+=iconRow(ROW1,ti,4)+iconRow(ROW2,ti,open?4:12);
+    if(open)h+=iconRow(POSNS,ti,12);
+  });
+  h+='<div style="font-size:12px;color:var(--text2);margin:2px 0 3px">Objects</div>';
+  h+='<div style="display:flex;gap:4px;flex-wrap:wrap;row-gap:4px">'
+    +OBJS.map(function(a){return iconTile(listIdx(a[0],null),46);}).join('')+'</div>';
   document.getElementById('iconGrid').innerHTML=h;
-})();
+}
+document.getElementById('iconGrid').style.display='block';
+drawIcons();
+document.getElementById('iconGrid').addEventListener('input',function(e){
+  var cu=e.target.closest('[data-cust]');
+  if(cu)setTeamColor(+cu.dataset.cust,cu.value);
+});
 document.getElementById('iconGrid').addEventListener('click',function(e){
+  var sc=e.target.closest('[data-setc]');
+  if(sc){ setTeamColor(+sc.dataset.setc,sc.dataset.c); return; }
+  var tb=e.target.closest('[data-tc]');
+  if(tb){ var tci=+tb.dataset.tc; ICCOL=(ICCOL===tci?-1:tci); drawIcons(); return; }
+  var pb=e.target.closest('[data-pos]');
+  if(pb){ var pi=+pb.dataset.pos; ICPOS[pi]=!ICPOS[pi]; drawIcons(); return; }
   var b=e.target.closest('[data-i]'); if(!b)return;
   var a=LIST[+b.dataset.i], v=views[mode][sub];
-  var it=addItem(a[0],v[0]+v[2]/2+(Math.random()*4-2),v[1]+v[3]/2+(Math.random()*4-2),0,a[1]);
+  var it=addItem(a[0],v[0]+v[2]/2+(Math.random()*4-2),v[1]+v[3]/2+(Math.random()*4-2),0,
+                 a[1]===null?null:teamCol(a[1]));
   hist.push({undo:function(){items=items.filter(function(i){return i!==it;});sel=null;render();}});
   tool='select';sel=it.id;ui();render();closeAll();dirty();
 });
@@ -1185,7 +1294,7 @@ function render(){
     }
     g.appendChild(rg);
     if(t.l){
-      var tx=el('text',{x:0,y:0,transform:'rotate('+(-wrot)+') translate(0 '+(4*S)+')','text-anchor':'middle','font-size':(t.l.length>1||t.s==='gk'?8.8:9.6)*S,'font-weight':500,fill:'#fff','font-family':'sans-serif','pointer-events':'none'});
+      var tx=el('text',{x:0,y:0,transform:'rotate('+(-wrot)+') translate(0 '+(4*S)+')','text-anchor':'middle','font-size':(t.l.length>1||t.s==='gk'?8.8:9.6)*S,'font-weight':500,fill:labelInk(it.col),'font-family':'sans-serif','pointer-events':'none'});
       tx.textContent=t.l;g.appendChild(tx);
     }
     layer.appendChild(g);
@@ -2281,7 +2390,7 @@ function bigSvg(sn,maxw,maxh){
   [[65.5,90],[134.5,-90]].forEach(function(z){
     if((z[0]-LGH/2)>=v[0]-0.5&&(z[0]+LGH/2)<=v[0]+v[2]+0.5&&(42.5-LGW/2)>=v[1]-0.5&&(42.5+LGW/2)<=v[1]+v[3]+0.5)
       o+='<use href="#lg" transform="translate('+z[0]+' 42.5) rotate('+z[1]+') translate(-'+(LGW/2)+' -'+(LGH/2)+')" opacity="0.5"/>';});
-  sn.items.forEach(function(i){o+='<g transform="'+itemXf(i,wr)+'"'+(i.col?' style="color:'+i.col+'"':'')+'><use href="#'+T[i.t].s+'" width="56" height="56"/>'+(T[i.t].l?'<text x="0" y="'+(4*S)+'" text-anchor="middle" font-size="'+((T[i.t].l.length>1||T[i.t].s==='gk'?8.8:9.6)*S)+'" font-weight="500" fill="#fff" font-family="sans-serif" transform="rotate('+(-wr)+') scale('+(1/S)+')">'+T[i.t].l+'</text>':'')+'</g>';});
+  sn.items.forEach(function(i){o+='<g transform="'+itemXf(i,wr)+'"'+(i.col?' style="color:'+i.col+'"':'')+'><use href="#'+T[i.t].s+'" width="56" height="56"/>'+(T[i.t].l?'<text x="0" y="'+(4*S)+'" text-anchor="middle" font-size="'+((T[i.t].l.length>1||T[i.t].s==='gk'?8.8:9.6)*S)+'" font-weight="500" fill="'+labelInk(i.col)+'" font-family="sans-serif" transform="rotate('+(-wr)+') scale('+(1/S)+')">'+T[i.t].l+'</text>':'')+'</g>';});
   sn.lines.forEach(function(l){try{o+=build({type:l.type,color:l.color,step:l.step||0.4,arr:l.arr,sel:false}).outerHTML;}catch(e){}});
   return o+(rp?'</g>':'')+'</svg>';
 }
@@ -2534,6 +2643,7 @@ document.getElementById('barTab').onclick=function(){
 
 /* ---------- start ---------- */
 loadDB();
+drawIcons();syncPen();
 if(DB.barsOff){document.body.classList.add('bars-off');
   document.getElementById('barTab').setAttribute('aria-label','Show the toolbars');}
 seedDrills();
