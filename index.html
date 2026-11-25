@@ -620,7 +620,7 @@ var HDRLOGO='data:image/webp;base64,UklGRlA/AABXRUJQVlA4WAoAAAAQAAAAowEAXgAAQUxQ
 /* MAJOR.MINOR.PATCH. Patch for fixes, minor for new features, major for
    anything that changes saved drills in a way an older build cannot read.
    The service worker's cache name in sw.js carries the same number. */
-var APPVER='0.15.0';
+var APPVER='0.15.1';
 
 /* ---------- tags ---------- */
 var TAGS=[['skate','Skating'],['puck','Puck Handling'],['pass','Passing'],['shoot','Shooting'],
@@ -1074,8 +1074,15 @@ document.querySelectorAll('#modes button').forEach(function(b){
     if(mode==='full'||mode==='center'){closeAll();dirty();}
   };
 });
-window.addEventListener('resize',paint);
-window.addEventListener('orientationchange',paint);
+function onResize(){
+  paint();
+  /* The picker's shape depends on how much width it has, so rebuild it
+     when the window or the phone turns. */
+  var pop=document.getElementById('pIcons');
+  if(pop&&getComputedStyle(pop).display!=='none')drawIcons();
+}
+window.addEventListener('resize',onResize);
+window.addEventListener('orientationchange',onResize);
 
 /* ---------- menus ---------- */
 var trashEl=document.getElementById('trash'), overTrash=false;
@@ -1153,9 +1160,9 @@ function iconTile(i,w){
     +'" font-weight="500" fill="'+labelInk(col)+'" font-family="sans-serif">'+t.l+'</text>':'')
     +'</svg></button>';
 }
-function iconRow(keys,ti,mb){
+function iconRow(keys,ti,mb,w){
   return '<div style="display:flex;gap:4px;margin:0 0 '+mb+'px">'
-    +keys.map(function(k){return iconTile(listIdx(k,ti),46);}).join('')+'</div>';
+    +keys.map(function(k){return iconTile(listIdx(k,ti),w||46);}).join('')+'</div>';
 }
 /* Changing a team's color repaints the players of that team already on the
    ice, which is what you want when you are matching the other team's
@@ -1187,10 +1194,22 @@ function syncPen(){
   });
 }
 function drawIcons(){
-  var h='';
+  var grid=document.getElementById('iconGrid');
+  /* A column is about 300px. Go side by side as soon as two will fit and
+     let them wrap, so a landscape phone gets two and a laptop gets three.
+     The panel is measured from the window, because the grid reports a
+     width of zero while the popup is still hidden. */
+  var avail=window.innerWidth-24, cols=avail>=620, blocks=[];
+  /* Three columns of 46px tiles want 928px, which a 900px landscape phone
+     just misses. Trimming the tiles to 42 brings all three onto one row
+     there, which is the difference between the panel taking a third of
+     the screen and taking well over half. */
+  var TW=(cols&&avail<950)?42:46;
+  var BW=TW*6+20;
   TEAMS.forEach(function(t,ti){
     var open=ICPOS[ti];
-    h+='<div style="display:flex;align-items:center;gap:7px;margin:'+(ti?'4px':'0')+' 0 4px">'
+    var h='';
+    h+='<div style="display:flex;align-items:center;gap:7px;margin:0 0 4px">'
       +'<span style="font-size:13px;font-weight:500">'+t[0]+'</span>'
       +'<button data-tc="'+ti+'" aria-label="'+t[0]+' team color" style="flex:none;width:21px;height:21px;padding:0;border-radius:50%;background:'+teamCol(ti)+'"></button>'
       +'<span style="flex:1"></span>'
@@ -1206,13 +1225,20 @@ function drawIcons(){
         +'<input type="color" data-cust="'+ti+'" value="'+teamCol(ti)+'" aria-label="Custom '+t[0]+' color" style="width:28px;height:28px;padding:0;border:none;background:none;cursor:pointer">'
         +'</div>';
     }
-    h+=iconRow(ROW1,ti,4)+iconRow(ROW2,ti,open?4:12);
-    if(open)h+=iconRow(POSNS,ti,12);
+    h+=iconRow(ROW1,ti,4,TW)+iconRow(ROW2,ti,open?4:cols?0:12,TW);
+    if(open)h+=iconRow(POSNS,ti,cols?0:12,TW);
+    blocks.push(h);
   });
-  h+='<div style="font-size:12px;color:var(--text2);margin:2px 0 3px">Objects</div>';
-  h+='<div style="display:flex;gap:4px;flex-wrap:wrap;row-gap:4px">'
-    +OBJS.map(function(a){return iconTile(listIdx(a[0],null),46);}).join('')+'</div>';
-  document.getElementById('iconGrid').innerHTML=h;
+  var ob='<div style="font-size:12px;color:var(--text2);margin:0 0 3px">Objects</div>'
+    +'<div style="display:flex;gap:4px;flex-wrap:wrap;row-gap:4px'+(cols?';max-width:'+BW+'px':'')+'">'
+    +OBJS.map(function(a){return iconTile(listIdx(a[0],null),TW);}).join('')+'</div>';
+  blocks.push(ob);
+  if(cols){
+    grid.innerHTML='<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;row-gap:12px">'
+      +blocks.map(function(x){return '<div style="flex:none">'+x+'</div>';}).join('')+'</div>';
+  }else{
+    grid.innerHTML=blocks.join('');
+  }
 }
 document.getElementById('iconGrid').style.display='block';
 drawIcons();
