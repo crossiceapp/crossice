@@ -345,6 +345,28 @@ function labelInk(hex){
   return (0.299*r+0.587*g+0.114*b)>140?'#15140F':'#fff';
 }
 var TEAMPAL=['#0066FF','#FF1F1F','#00C244','#A726FF','#F08C00','#15140F','#E8B800','#8B939B'];
+/* Weighted RGB distance, the cheap approximation of how different two
+   colors look. The closest pair worth keeping apart in the palette above
+   is orange and gold at 89; two shades of the same color come in under 60,
+   so 70 blocks the confusable ones and allows everything deliberate. */
+function colDist(a,b){
+  if(!a||!b||a.charAt(0)!=='#'||b.charAt(0)!=='#')return 999;
+  function p(h,i){return parseInt(h.substr(i,2),16);}
+  var r1=p(a,1),g1=p(a,3),b1=p(a,5), r2=p(b,1),g2=p(b,3),b2=p(b,5), rm=(r1+r2)/2;
+  return Math.sqrt((2+rm/256)*(r1-r2)*(r1-r2)+4*(g1-g2)*(g1-g2)+(2+(255-rm)/256)*(b1-b2)*(b1-b2));
+}
+function tooClose(a,b){return colDist(a,b)<70;}
+/* Borrow the status line for a moment, then put it back. The hold matters:
+   an autosave lands every few seconds and would otherwise wipe the message
+   before it had been read. */
+var statTmr=null, statHold=0;
+function flashStatus(msg){
+  var el=document.getElementById('status'); if(!el)return;
+  el.textContent=msg;
+  statHold=Date.now()+2600;
+  clearTimeout(statTmr);
+  statTmr=setTimeout(function(){statHold=0;setStatus();},2600);
+}
 var P={pencil:'M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3zM13.5 6.5l3 3',pointer:'M5 3l14 7-6 2-2 6z',eraser:'M19 20H8.5l-4-4a1.4 1.4 0 0 1 0-2L14 4.5a1.4 1.4 0 0 1 2 0l4 4a1.4 1.4 0 0 1 0 2L12 19M8 12l5 5',undo:'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',dots:'M5 12h.01M12 12h.01M19 12h.01',trash:'M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3',chev:'M6 9l6 6 6-6',folder:'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',save:'M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',plus:'M12 5v14M5 12h14',full:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',image:'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15 9h.01'};
 function ico(n,s){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(n==='dots'?3:2)+'" stroke-linecap="round" stroke-linejoin="round"><path d="'+P[n]+'"/></svg>';}
 function fillIcons(root){root.querySelectorAll('[data-ico]').forEach(function(e){e.innerHTML=ico(e.dataset.ico,+e.dataset.s||18);e.style.display='inline-flex';});}
@@ -420,6 +442,48 @@ function unionRect(L,g){
   return [x0,y0,w,h];
 }
 function mergeKey(pl,g){return pl.id+':'+g.slice().sort(function(a,b){return a-b;}).join('-');}
+
+function planXs(pl){return Array.isArray(pl&&pl.xs)?pl.xs:[];}
+function xsOf(pl,i){
+  var out=null;
+  planXs(pl).forEach(function(pr){
+    var k=pr.indexOf(i); if(k>=0)out={pair:pr,k:k};
+  });
+  return out;
+}
+function xsKey(pl,pr,k){return pl.id+':x'+pr.join('-')+':'+k;}
+/* The union of the pair, cut along whichever axis does not already
+   separate them, at the halfway point. */
+function xsRects(L,pr){
+  var a=views[L.m]&&views[L.m][L.keys[pr[0]]], b=views[L.m]&&views[L.m][L.keys[pr[1]]];
+  if(!a||!b)return null;
+  var u=unionRect(L,pr); if(!u)return null;
+  var splitX=(Math.abs(a[1]-b[1])>0.01);   /* they differ in y, so cut in x */
+  if(splitX)return [[u[0],u[1],u[2]/2,u[3]], [u[0]+u[2]/2,u[1],u[2]/2,u[3]]];
+  return [[u[0],u[1],u[2],u[3]/2], [u[0],u[1]+u[3]/2,u[2],u[3]/2]];
+}
+/* Center ice only. Sixths 3 and 6 split it across the rink; rotated, they
+   split it down the red line. Every other pair of sections would technically
+   work but nobody has asked for one, and the end zones are wanted as they are. */
+function xsPair(pl){
+  if(!pl||(pl.layout||'sixth')!=='sixth')return null;
+  var L=layoutOf(pl), a=L.keys.indexOf('3'), b=L.keys.indexOf('6');
+  if(a<0||b<0)return null;
+  return [Math.min(a,b),Math.max(a,b)];
+}
+function xsEligible(pl,i,j){
+  var pr=xsPair(pl);
+  if(!pr||oneOf(pl))return false;
+  if(pr.indexOf(i)<0||pr.indexOf(j)<0||i===j)return false;
+  if(groupOf(pl,i)||groupOf(pl,j)||xsOf(pl,i)||xsOf(pl,j))return false;
+  return !!xsRects(layoutOf(pl),pr);
+}
+function xsCandidates(pl,i){
+  var pr=xsPair(pl);
+  if(!pr||pr.indexOf(i)<0)return [];
+  var j=(pr[0]===i)?pr[1]:pr[0];
+  return xsEligible(pl,i,j)?[j]:[];
+}
 function regMerges(){
   views.merged={};
   (DB.plans||[]).forEach(function(p){
@@ -429,11 +493,35 @@ function regMerges(){
       var r=unionRect(L,g);
       if(r)views.merged[mergeKey(p,g)]=r;
     });
+    planXs(p).forEach(function(pr){
+      var rs=xsRects(L,pr);
+      if(rs){views.merged[xsKey(p,pr,0)]=rs[0];views.merged[xsKey(p,pr,1)]=rs[1];}
+    });
   });
 }
 /* Only the owner of a combined cell is ever drawn, so a card left sitting in
    one of the aliased sections would vanish without being deleted. Fold any
    such card into the owner and normalise the cell's view. */
+/* A card whose stored view has gone - a merge undone by an older build, or
+   a rotation removed - renders as the whole sheet. Point it back at its own
+   cell. The drawing is not touched, only the label on it. */
+function homeSlots(){
+  var ch=false;
+  (DB.plans||[]).forEach(function(p){
+    if(!p||!Array.isArray(p.slots))return;
+    cellsOf(p).forEach(function(i){
+      var c=p.slots[i]; if(!c||!c.snap)return;
+      if(views[c.snap.mode]&&views[c.snap.mode][c.snap.sub])return;
+      var cv=cellView(p,i);
+      if(views[cv[0]]&&views[cv[0]][cv[1]]){
+        c.snap.mode=cv[0];c.snap.sub=cv[1];
+        c.snap.home={m:cv[0],s:cv[1]};c.snap.xf=idXf();
+        ch=true;
+      }
+    });
+  });
+  return ch;
+}
 function tidyGroups(){
   var ch=false;
   (DB.plans||[]).forEach(function(p){
@@ -471,12 +559,16 @@ function oneOf(pl){
   return (views[L.m]&&views[L.m][pl.one])?pl.one:null;
 }
 function cellRect(pl,i){
-  var g=groupOf(pl,i),L=layoutOf(pl);
+  var L=layoutOf(pl), x=xsOf(pl,i);
+  if(x){var rs=xsRects(L,x.pair); if(rs)return rs[x.k];}
+  var g=groupOf(pl,i);
   return g?unionRect(L,g):(views[L.m]&&views[L.m][L.keys[i]]);
 }
 function cellView(pl,i){
   var L=layoutOf(pl), o=oneOf(pl);
   if(o)return [L.m,o];
+  var x=xsOf(pl,i);
+  if(x)return ['merged',xsKey(pl,x.pair,x.k)];
   var g=groupOf(pl,i);
   return g?['merged',mergeKey(pl,g)]:[L.m,L.keys[i]];
 }
@@ -503,10 +595,11 @@ function partsOf(card,g){
 }
 function mergeParts(a,b){var o={},k;for(k in a)o[k]=a[k];for(k in b)o[k]=b[k];return o;}
 function mergeCandidates(pl,i){
-  if(oneOf(pl))return [];
+  if(oneOf(pl)||xsOf(pl,i))return [];
   var L=layoutOf(pl), gi=groupOf(pl,i)||[i], out=[];
   cellsOf(pl).forEach(function(j){
     if(j===ownerOf(pl,i))return;
+    if(xsOf(pl,j))return;
     var gj=groupOf(pl,j)||[j];
     if(unionRect(L,gi.concat(gj)))out.push(j);
   });
@@ -620,7 +713,7 @@ var HDRLOGO='data:image/webp;base64,UklGRlA/AABXRUJQVlA4WAoAAAAQAAAAowEAXgAAQUxQ
 /* MAJOR.MINOR.PATCH. Patch for fixes, minor for new features, major for
    anything that changes saved drills in a way an older build cannot read.
    The service worker's cache name in sw.js carries the same number. */
-var APPVER='0.15.1';
+var APPVER='0.16.5';
 
 /* ---------- tags ---------- */
 var TAGS=[['skate','Skating'],['puck','Puck Handling'],['pass','Passing'],['shoot','Shooting'],
@@ -703,7 +796,7 @@ var HOWTO=[
   ['Place one','Tap Icons, choose it, then tap the ice. Pucks, rings, tennis balls, cones, tires, sticks, bumper pads and nets are all in there.'],
   ['Forwards and defence','F and D are the plain ones. F1 to F4 and D1 to D4 tell lines or groups apart \u2014 place F1 three times for a first line, or use them one each if you number by position.'],
   ['Positions','LW, C, RW, LD and RD are folded away behind + positions on each team, since most age groups do not use them.'],
-  ['Team colors','Tap the circle beside Away or Home to change that team\u2019s color \u2014 handy for matching the other team at a game. Players of that team already on the ice change with it, and the pen gets the new color too. Saved drills keep the colors they were saved with.'],
+  ['Team colors','Tap the circle beside Away or Home to change that team\u2019s color \u2014 handy for matching the other team at a game. Players of that team already on the ice change with it, and the pen gets the new color too. Saved drills keep the colors they were saved with. A color too close to the other team\u2019s is greyed out, so the two can never end up the same.'],
   ['Duplicate','Double-tap an icon to drop a copy beside it.'],
   ['Delete','Drag it to the bin that appears while you drag.'],
   ['Turn it','Select a net, stick or bumper and drag one of the corner handles. It snaps every 15 degrees.']
@@ -739,6 +832,7 @@ var HOWTO=[
   ['Move a drill between sections','Open it with Edit in this plan, switch sections, then Move it here. The plan follows it.'],
   ['Everything in one corner','Tap One section, then pick which one. All the plan\u2019s drills run there one after another, and it prints two to a page with no cover sheet.'],
   ['Combine sections','Select a section and tap Combine with. They have to form a rectangle. Split back apart gives each one its name and notes back.'],
+  ['Rotate center ice','Select section 3 or 6 and tap Rotate. Center ice splits down the red line instead of across the rink, which is how a lot of printed practice plans lay it out. Both sections keep their own drill, and Rotate back undoes it.'],
   ['Header and footer','Date, team, focus and equipment print on every page.']
  ]],
  ['Printing',[
@@ -873,7 +967,7 @@ function tagEdit(d){
 
 /* ---------- storage ---------- */
 var DB={drills:[],plans:[],draft:null,src:null}, ctx={k:'draft'};
-function loadDB(){try{var s=localStorage.getItem('hockeyWhiteboardV1');if(s){var o=JSON.parse(s);if(o&&o.drills){DB=o;ADMIN=DB.admin===true;if(DB.cols&&DB.cols.length===2)TEAMC=DB.cols.slice();cleanSamples();brighten();renameSubs();regMerges();tidyGroups();repairSlots();repairSections();autoTagAll();}}}catch(e){}}
+function loadDB(){try{var s=localStorage.getItem('hockeyWhiteboardV1');if(s){var o=JSON.parse(s);if(o&&o.drills){DB=o;ADMIN=DB.admin===true;if(DB.cols&&DB.cols.length===2)TEAMC=DB.cols.slice();cleanSamples();brighten();renameSubs();regMerges();homeSlots();tidyGroups();repairSlots();repairSections();autoTagAll();}}}catch(e){}}
 var CMAP={'#185FA5':'#0066FF','#0D5BFF':'#0066FF','#B83A38':'#FF1F1F','#E24B4A':'#FF1F1F','#FF2D1F':'#FF1F1F','#7F3FBF':'#A726FF','#9B1FE8':'#A726FF','#3B8A1A':'#00C244','#06B64A':'#00C244','#5F5E5A':'#3BE819'};
 function brightenSnap(sn){
   if(!sn)return;
@@ -981,6 +1075,7 @@ function slotHolding(pl){
   return -1;
 }
 function setStatus(){
+  if(Date.now()<statHold)return;
   var pl=ctx.k==='slot'?getPlan(ctx.p):null;
   var cd=ctx.k==='drill'?getDrill(ctx.id):null;
   document.getElementById('status').textContent=(cd?'Editing saved drill “'+cd.name+'”':(ctx.k==='slot'&&pl?'Plan copy, section '+(ctx.i+1):'Draft'))+' · saved '+hhmm();
@@ -1108,7 +1203,10 @@ function ui(){
   document.getElementById('dot').style.background=color;
   document.getElementById('toolIcon').innerHTML=ico(tool==='select'?'pointer':tool==='erase'?'eraser':'pencil',18);
   layer.style.pointerEvents=(tool==='draw')?'none':'auto';
-  var bi=document.getElementById('bInfo');if(bi)bi.style.display=hasDetail()?'inline-flex':'none';
+  /* Always offered. Hiding it until a drill had details meant a new drill
+     could never get its first one: the only way in was a button that only
+     appeared once you were already through it. */
+  var bi=document.getElementById('bInfo');if(bi)bi.style.display='inline-flex';
 }
 document.querySelectorAll('#types button').forEach(function(b){b.onclick=function(){tool='draw';ptype=b.dataset.t;clearSel();render();ui();closeAll();};});
 document.getElementById('sel').onclick=function(){tool='select';ui();closeAll();};
@@ -1170,6 +1268,12 @@ function iconRow(keys,ti,mb,w){
 function setTeamColor(ti,hex){
   var old=teamCol(ti);
   if(!hex||hex===old)return;
+  var other=teamCol(ti?0:1);
+  if(tooClose(hex,other)){
+    flashStatus('Too close to the '+(ti?'Away':'Home')+' team\u2019s color \u2014 pick another');
+    drawIcons();
+    return;
+  }
   var hit=items.filter(function(i){return i.col===old;});
   var pen=(color===old);
   TEAMC[ti]=hex; DB.cols=TEAMC.slice(); persist();
@@ -1219,8 +1323,12 @@ function drawIcons(){
     if(ICCOL===ti){
       h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 7px">'
         +TEAMPAL.map(function(c){
-          return '<button data-setc="'+ti+'" data-c="'+c+'" aria-label="'+c+'" style="flex:none;width:25px;height:25px;padding:0;border-radius:50%;background:'+c
-            +(c===teamCol(ti)?';outline:2px solid var(--text);outline-offset:2px':'')+'"></button>';
+          var mine=(c===teamCol(ti)), off=tooClose(c,teamCol(ti?0:1));
+          return '<button data-setc="'+ti+'" data-c="'+c+'" aria-label="'+c+(off?' (taken by the other team)':'')+'"'
+            +(off?' aria-disabled="true"':'')
+            +' style="flex:none;width:25px;height:25px;padding:0;border-radius:50%;background:'+c
+            +(mine?';outline:2px solid var(--text);outline-offset:2px':'')
+            +(off?';opacity:.25':'')+'"></button>';
         }).join('')
         +'<input type="color" data-cust="'+ti+'" value="'+teamCol(ti)+'" aria-label="Custom '+t[0]+' color" style="width:28px;height:28px;padding:0;border:none;background:none;cursor:pointer">'
         +'</div>';
@@ -1672,7 +1780,7 @@ function snapThumb(s,x,y,w,h,portrait,pad){
 function tsvg(s,w,h){return '<svg width="'+w+'" height="'+h+'" style="flex:none;display:block">'+snapThumb(s,0,0,w,h,false)+'</svg>';}
 
 /* ---------- library ---------- */
-var LB={tab:'drills',scr:'list',plan:null,slot:null,picker:false,saveAs:false,msg:'',err:'',del:null,delp:null,setl:null,mrg:null,hdr:false,q:'',filt:[],favOnly:false,tagd:null,qf:false,sort:'new',pickOn:false,pick:[],tagOpen:false};
+var LB={tab:'drills',scr:'list',plan:null,slot:null,picker:false,saveAs:false,msg:'',err:'',del:null,delp:null,setl:null,mrg:null,hdr:false,q:'',filt:[],favOnly:false,tagd:null,qf:false,sort:'new',pickOn:false,bsel:[],tagOpen:false};
 var lib=document.getElementById('lib'), libIn=document.getElementById('libIn');
 function canEdit(d){return ADMIN||!d.core;}
 function usedIn(id){return DB.plans.filter(function(p){return p.slots.some(function(s){return s&&s.src===id;});}).length;}
@@ -1752,8 +1860,15 @@ function renderLib(){
       h+='<div class="btns" style="margin:4px 0 0">';
       if(groupOf(pl,LB.slot))h+='<button data-act="splitslot">Split back apart</button>';
       MC.forEach(function(j){h+='<button data-act="mergeslot" data-v="'+j+'">Combine with '+cellNums(pl,j).join('+')+'</button>';});
+      var XC=xsCandidates(pl,LB.slot);
+      XC.forEach(function(j){h+='<button data-act="xsplit" data-v="'+j+'">Rotate with '+(j+1)+'</button>';});
+      if(xsOf(pl,LB.slot))h+='<button data-act="xsoff">Rotate back</button>';
       h+='</div>';
-      if(!MC.length&&!groupOf(pl,LB.slot)&&!ONE)h+='<p class="note">Nothing next to this one makes a rectangle, so it cannot be combined.</p>';
+      if(xsOf(pl,LB.slot)){
+        var xp=xsOf(pl,LB.slot).pair;
+        h+='<p class="note">Center ice is split down the red line instead of across the rink.</p>';
+      }
+      if(!MC.length&&!groupOf(pl,LB.slot)&&!ONE&&!xsOf(pl,LB.slot))h+='<p class="note">Nothing next to this one makes a rectangle, so it cannot be combined.</p>';
       if(LB.mrg!==null&&MC.indexOf(LB.mrg)>=0){
         var oa=ownerOf(pl,LB.slot), ob=ownerOf(pl,LB.mrg);
         h+='<p class="note err">Sections '+cellNums(pl,oa).join('+')+' and '+cellNums(pl,ob).join('+')+' both already have a drill \u2014 \u201c'+esc(pl.slots[oa].name)+'\u201d and \u201c'+esc(pl.slots[ob].name)+'\u201d. Combining puts both on one sheet as a single drill. Nothing is lost: splitting apart later gives each section back its own name, notes and minutes.</p>';
@@ -1786,7 +1901,7 @@ function renderLib(){
           +SORTS.map(function(sv){return chipBtn('sort',sv[0],sv[1],(LB.sort||'new')===sv[0]);}).join('')
           +chipBtn('pickon','',LB.pickOn?'Done':'Select',!!LB.pickOn)+'</div>';
         if(LB.pickOn){
-          var np=(LB.pick||[]).length;
+          var np=(LB.bsel||[]).length;
           h+='<div style="border:.5px solid var(--border);border-radius:4px;padding:6px 8px;margin:0 0 8px;background:var(--surface)">';
           h+='<div class="lrow" style="gap:6px;margin-bottom:'+(np?'6px':'0')+'"><div class="meta" style="flex:1;min-width:0">'+(np?np+' selected':'Tap the drills you want to change')+'</div>'
             +chipBtn('pickall','','Select all '+FL.length,false)+(np?chipBtn('picknone','','None',false):'')+'</div>';
@@ -1794,7 +1909,7 @@ function renderLib(){
             h+='<div class="meta" style="margin:0 0 3px">Tap a tag to add it to all '+np+'. Tap again to take it off all of them.</div>';
             h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
             ALLTAGS.forEach(function(t){
-              var all=(LB.pick||[]).every(function(pid){var dd=getDrill(pid);return dd&&(dd.tags||[]).indexOf(t[0])>=0;});
+              var all=(LB.bsel||[]).every(function(pid){var dd=getDrill(pid);return dd&&(dd.tags||[]).indexOf(t[0])>=0;});
               h+=chipBtn('btag',t[0],esc(t[1]),all);
             });
             h+='</div>';
@@ -1806,7 +1921,7 @@ function renderLib(){
       FL.forEach(function(d){
         var u=usedIn(d.id);
         h+='<div class="it" style="cursor:default">'
-          +(LB.pickOn?('<button data-act="pick" data-id="'+d.id+'" aria-label="Select this drill" style="flex:none;font-size:15px;line-height:1;padding:3px 7px'+((LB.pick||[]).indexOf(d.id)>=0?';background:var(--accent-bg);color:var(--accent-text)':'')+'">'+((LB.pick||[]).indexOf(d.id)>=0?'\u2611':'\u2610')+'</button>'):'')
+          +(LB.pickOn?('<button data-act="bsel" data-id="'+d.id+'" aria-label="Select this drill" style="flex:none;font-size:15px;line-height:1;padding:3px 7px'+((LB.bsel||[]).indexOf(d.id)>=0?';background:var(--accent-bg);color:var(--accent-text)':'')+'">'+((LB.bsel||[]).indexOf(d.id)>=0?'\u2611':'\u2610')+'</button>'):'')
           +tsvg(d.snap,64,38)+'<div class="mid"><div style="display:flex;align-items:center;gap:6px"><button data-act="fav" data-id="'+d.id+'" aria-label="Favorite" style="flex:none;font-size:15px;line-height:1;padding:3px 7px'+(d.fav?';color:#EF9F27':'')+'">'+(d.fav?'\u2605':'\u2606')+'</button><div class="nm"'+(canEdit(d)?' data-act="rename" data-k="d" data-id="'+d.id+'"':'')+'>'+esc(d.name)+(d.core?' <span style="font-size:11px;color:var(--text2);font-weight:400">\u00b7 core</span>':'')+'</div></div><div class="meta">'+(+d.snap.dur||8)+' min'+(u?' · in '+u+' plan'+(u===1?'':'s'):'')+'</div>'+((d.snap.keys&&d.snap.keys.length)?'<div class="meta">'+esc(d.snap.keys.join(' · '))+'</div>':'<div class="meta" style="color:#EF9F27">No key points yet</div>')+tagLine(d)+(d.snap.desc?'<div class="meta" style="color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+esc(d.snap.desc)+'</div>':'')+'</div><div style="display:flex;flex-direction:column;gap:4px;flex:none">'+'<button data-act="tagd" data-id="'+d.id+'" style="font-size:12px">Tags</button>'+(canEdit(d)?'<button data-act="editd" data-id="'+d.id+'" style="font-size:13px">Edit</button>':'')+'<button data-act="opend" data-id="'+d.id+'" style="font-size:13px">Edit as new</button>'+(canEdit(d)?'<button data-act="deld" data-id="'+d.id+'" style="font-size:13px;color:var(--danger)">'+(LB.del===d.id?'Tap to confirm':'Delete')+'</button>':'')+(ADMIN?'<button data-act="core" data-id="'+d.id+'" style="font-size:12px">'+(d.core?'Core \u2713':'Make core')+'</button>':'')+'</div></div>';
         if(LB.tagd===d.id)h+=tagEdit(d);
       });
@@ -1882,13 +1997,13 @@ libIn.addEventListener('click',function(e){
   else if(a==='tagd'){LB.tagd=(LB.tagd===id?null:id);}
   else if(a==='sort'){LB.sort=t.dataset.v;}
   else if(a==='tagopen'){LB.tagOpen=!LB.tagOpen;}
-  else if(a==='pickon'){LB.pickOn=!LB.pickOn;LB.pick=[];LB.tagd=null;}
-  else if(a==='pick'){LB.pick=LB.pick||[];
-    var pi=LB.pick.indexOf(id); if(pi<0)LB.pick.push(id); else LB.pick.splice(pi,1);}
-  else if(a==='pickall'){LB.pick=filtDrills().map(function(d){return d.id;});}
-  else if(a==='picknone'){LB.pick=[];}
+  else if(a==='pickon'){LB.pickOn=!LB.pickOn;LB.bsel=[];LB.tagd=null;}
+  else if(a==='bsel'){LB.bsel=LB.bsel||[];
+    var pi=LB.bsel.indexOf(id); if(pi<0)LB.bsel.push(id); else LB.bsel.splice(pi,1);}
+  else if(a==='pickall'){LB.bsel=filtDrills().map(function(d){return d.id;});}
+  else if(a==='picknone'){LB.bsel=[];}
   else if(a==='btag'){
-    var bk=t.dataset.v, ids=LB.pick||[];
+    var bk=t.dataset.v, ids=LB.bsel||[];
     var all=ids.every(function(pid){var dd=getDrill(pid);return dd&&(dd.tags||[]).indexOf(bk)>=0;});
     var n=0;
     ids.forEach(function(pid){
@@ -1915,7 +2030,7 @@ libIn.addEventListener('click',function(e){
       var LO=layoutOf(pl);
       pl.one=(ov==='on')?((LO.keys.indexOf(DB.onesec||'')>=0)?DB.onesec:LO.keys[0]):ov;
       DB.onesec=pl.one;
-      pl.groups=[];regMerges();
+      pl.groups=[];pl.xs=[];regMerges();
       /* Each drill keeps its own drawing but is moved onto the shared ice. */
       pl.slots.forEach(function(c){if(c){fitSnap(c.snap,LO.m,pl.one);c.mod=true;}});
       LB.msg='Every drill in this plan now runs in '+pl.one+'.';
@@ -1925,7 +2040,7 @@ libIn.addEventListener('click',function(e){
   else if(a==='setl'){
     var nk=t.dataset.v, NL=PLANL[nk];
     if(NL&&(pl.layout||'sixth')!==nk){
-      pl.groups=[];regMerges();
+      pl.groups=[];pl.xs=[];regMerges();
       var kept=pl.slots.filter(Boolean), drop=Math.max(0,kept.length-NL.keys.length);
       if(drop&&LB.setl!==nk){LB.setl=nk;LB.err='Switching to '+NL.label.toLowerCase()+' leaves room for '+NL.keys.length+' drills, so '+drop+' would be dropped. Tap '+NL.label+' again to confirm.';}
       else{
@@ -1966,6 +2081,34 @@ libIn.addEventListener('click',function(e){
   else if(a==='hdr'){LB.hdr=!LB.hdr;}
   else if(a==='pngplan'){planPng(pl);return;}
   else if(a==='mrgno'){LB.mrg=null;}
+  else if(a==='xsplit'){
+    var XJ=+t.dataset.v, pr=[LB.slot,XJ].sort(function(x,y){return x-y;});
+    if(!xsEligible(pl,pr[0],pr[1])){LB.err='Those two do not make a rectangle.';renderLib();return;}
+    pl.xs=planXs(pl).concat([pr]);
+    regMerges();
+    pr.forEach(function(k){
+      var c=pl.slots[k]; if(!c)return;
+      var cv=cellView(pl,k);
+      fitSnap(c.snap,cv[0],cv[1]); c.mod=true;
+    });
+    LB.slot=pr[0];persist();
+    LB.msg='Center ice now splits down the red line.';
+  }
+  else if(a==='xsoff'){
+    var xo=xsOf(pl,LB.slot);
+    if(xo){
+      var pr2=xo.pair;
+      pl.xs=planXs(pl).filter(function(q){return q!==pr2;});
+      pr2.forEach(function(k){
+        var c=pl.slots[k]; if(!c)return;
+        var cv=cellView(pl,k);
+        fitSnap(c.snap,cv[0],cv[1]); c.mod=true;
+      });
+      regMerges();
+      LB.msg='Center ice is back to the normal split.';
+    }
+    persist();
+  }
   else if(a==='mergeslot'){
     var MJ=+t.dataset.v, ML=layoutOf(pl);
     if(pl.slots[ownerOf(pl,LB.slot)]&&pl.slots[ownerOf(pl,MJ)]&&LB.mrg!==MJ){LB.mrg=MJ;renderLib();return;}
@@ -2136,11 +2279,14 @@ function sheetSvgEl(pl,sec){
   list.forEach(function(c){c.snap.lines.forEach(function(l){
     try{o.appendChild(build({type:l.type,color:l.color,step:l.step||0.4,arr:l.arr,sel:false}));}catch(e){}});});
   if(sec==null){
-    /* interior dividers only, drawn last so they sit above the drills, and
-       pulled in to the middle 80% so each one stops short of the boards */
-    var seen={};
-    L.keys.forEach(function(k){
-      var r=views[L.m][k];
+    /* Dividers and numbers come from the cells the plan actually has, not
+       from the layout's own rectangles. A combined pair is one cell with no
+       line through it, and a rotated center ice is divided down the red line
+       rather than across the rink. Drawn last so they sit above the drills,
+       and pulled in to the middle 80% so each one stops short of the boards. */
+    var CL2=cellsOf(pl), seen={};
+    CL2.forEach(function(ci){
+      var r=cellRect(pl,ci); if(!r)return;
       if(r[0]>0.1)seen['x'+r[0]+'_'+r[1]]=[r[0],r[1],r[0],r[1]+r[3]];
       if(r[0]+r[2]<199.9)seen['x'+(r[0]+r[2])+'_'+r[1]]=[r[0]+r[2],r[1],r[0]+r[2],r[1]+r[3]];
       if(r[1]>0.1)seen['y'+r[1]+'_'+r[0]]=[r[0],r[1],r[0]+r[2],r[1]];
@@ -2151,16 +2297,16 @@ function sheetSvgEl(pl,sec){
       o.appendChild(el('line',{x1:mx+(d[0]-mx)*q,y1:my+(d[1]-my)*q,x2:mx+(d[2]-mx)*q,y2:my+(d[3]-my)*q,
         stroke:'#0B0B0C','stroke-width':1.65,'stroke-linecap':'round'}));
     });
-    L.keys.forEach(function(k,i){
-      /* Numbers sit just outside the boards, centred on their zone: above for
+    CL2.forEach(function(ci){
+      /* Numbers sit just outside the boards, centred on their cell: above for
          the near-side row, below for the far side. Amber on a dark outline so
          they read against a dark app background and against white on export. */
-      var r=views[L.m][k];
+      var r=cellRect(pl,ci); if(!r)return;
       var above=(r[1]<0.1&&r[1]+r[3]>84.9)||((r[1]+r[3]/2)<42.5);
       var bx=r[0]+r[2]/2, by=above?-5.4:90.4;
       o.appendChild(el('circle',{cx:bx,cy:by,r:3.6,fill:'#EF9F27',stroke:'#101014','stroke-width':0.7}));
       var tx=el('text',{x:bx,y:by+1.85,'text-anchor':'middle','font-size':5.1,'font-weight':700,fill:'#17170F','font-family':'sans-serif'});
-      tx.textContent=String(i+1);o.appendChild(tx);
+      tx.textContent=cellNums(pl,ci).join('+');o.appendChild(tx);
     });
   }
   return o;
