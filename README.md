@@ -1,8 +1,8 @@
 # CrossIce
 
-A hockey whiteboard and practice-plan builder. One page, no account, works offline.
+A hockey whiteboard and practice-plan builder. One page, no account, works offline. Created by youth hockey for youth hockey. Keeping it free for the love of the game!
 
-Live: https://USERNAME.github.io/crossice/   <-- replace USERNAME after you publish
+Live: https://crossiceapp.github.io/crossice/   <-- replace USERNAME after you publish
 
 ## Updating the app
 
