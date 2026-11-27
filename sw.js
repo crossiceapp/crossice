@@ -4,7 +4,7 @@
    minor for new features (0.10.0), major for anything that changes saved
    drills in a way an older build cannot read (1.0.0).
    That is what tells every coach's phone to pick up the new version. */
-const CACHE = 'crossice-0.16.5';
+const CACHE = 'crossice-0.22.0';
 
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
